@@ -36,3 +36,6 @@
 
 /old_build
 /Makefile
+
+.idea*
+cmake-*
