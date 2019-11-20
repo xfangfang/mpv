@@ -77,6 +77,7 @@
 #define HAVE_VAPOURSYNTH_CORE 0
 #define HAVE_LIBARCHIVE 0
 #define HAVE_SDL2 1
+#define HAVE_SDL2_AUDIO 1
 #define HAVE_OSS_AUDIO 0
 #define HAVE_RSOUND 0
 #define HAVE_SNDIO 0
@@ -155,8 +156,7 @@
 #define HAVE_MACOS_TOUCHBAR 0
 #define HAVE_MACOS_COCOA_CB 0
 #define CONFIGURATION "./waf configure --disable-cplayer --disable-libmpv-shared --enable-libmpv-static --disable-cplugins --disable-asm --disable-libavdevice --enable-sdl2 --disable-oss-audio --disable-rsound --disable-sndio --disable-pulse --disable-jack --disable-openal --disable-opensles --disable-alsa --disable-coreaudio --disable-audiounit --disable-wasapi --enable-gl --enable-plain-gl --disable-cocoa --disable-drm --disable-drmprime --disable-gbm --disable-wayland-scanner --disable-wayland-protocols --disable-wayland --disable-x11 --disable-xv --disable-gl-cocoa --disable-gl-x11 --disable-egl-x11 --disable-egl-drm --disable-gl-wayland --disable-gl-win32 --disable-gl-dxinterop --disable-egl-angle --disable-egl-angle-lib --disable-egl-angle-win32 --disable-vdpau --disable-vdpau-gl-x11 --disable-vaapi --disable-vaapi-x11 --disable-vaapi-wayland --disable-vaapi-drm --disable-vaapi-glx --disable-vaapi-x-egl --disable-caca --disable-jpeg --disable-direct3d --disable-shaderc --disable-crossc --disable-d3d11 --disable-rpi --disable-ios-gl --disable-mali-fbdev --disable-vulkan"
-#define MPV_CONFDIR "/usr/local/etc/mpv"
-#define FULLCONFIG "atomics build-date debug-build fchmod ffmpeg gl glibc-thread-name glob glob-posix gnuc gpl iconv libaf libass libass-osd libav-any libavcodec libdl libm libmpv-static librt linux-fstatfs optimize plain-gl posix posix-or-mingw posix-spawn posix-spawn-native pthreads sdl2 stdatomic vt.h zlib"
+#define MPV_CONFDIR "/switch/pplay/mpv"
+#define FULLCONFIG "atomics build-date debug-build fchmod ffmpeg gl glibc-thread-name glob glob-posix gnuc gpl libaf libass libass-osd libav-any libavcodec libdl libm libmpv-static librt linux-fstatfs optimize plain-gl posix posix-or-mingw posix-spawn posix-spawn-native pthreads sdl2 stdatomic vt.h zlib"
 #define HAVE_TA_LEAK_REPORT 0
-#define HAVE_SDL2_AUDIO 1
 #endif /* W_CONFIG_H_WAF */
