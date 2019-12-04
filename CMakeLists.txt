@@ -151,7 +151,7 @@ set(MPV_CFLAGS
         -DM_SQRT2=1.41421356237309504880
         )
 
-set(MPV_LDFLAGS swscale swresample avformat avfilter avcodec avutil ass freetype png bz2 fribidi pthread m z)
+set(MPV_LDFLAGS swscale swresample avformat avfilter avcodec avutil opus vpx ass freetype png bz2 fribidi pthread m z)
 
 #####################
 # PLATORM SPECIFIC
@@ -162,7 +162,7 @@ if (PLATFORM_SWITCH)
     #####################
     list(APPEND MPV_CFLAGS -D__SWITCH__)
     list(APPEND MPV_INC ${DEVKITPRO}/portlibs/switch/include/SDL2)
-    list(APPEND MPV_LDFLAGS lzma mbedtls mbedcrypto mbedx509 nx)
+    list(APPEND MPV_LDFLAGS mbedtls mbedcrypto mbedx509 nx)
 elseif (PLATFORM_LINUX)
     #####################
     # LINUX PLATORM
