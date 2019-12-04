@@ -151,7 +151,7 @@ set(MPV_CFLAGS
         -DM_SQRT2=1.41421356237309504880
         )
 
-set(MPV_LDFLAGS swscale swresample avformat avfilter avcodec avutil opus vpx ass freetype png bz2 fribidi pthread m z)
+set(MPV_LDFLAGS swscale swresample avformat avfilter avcodec avutil ass freetype png bz2 fribidi pthread m z)
 
 #####################
 # PLATORM SPECIFIC
@@ -162,16 +162,15 @@ if (PLATFORM_SWITCH)
     #####################
     list(APPEND MPV_CFLAGS -D__SWITCH__)
     list(APPEND MPV_INC ${DEVKITPRO}/portlibs/switch/include/SDL2)
-    list(APPEND MPV_LDFLAGS mbedtls mbedcrypto mbedx509 nx)
+    list(APPEND MPV_LDFLAGS lzma opus vpx mbedtls mbedcrypto mbedx509 nx)
 elseif (PLATFORM_LINUX)
     #####################
     # LINUX PLATORM
     #####################
-    list(APPEND MPV_INC /usr/include/SDL2)
-    #list(APPEND MPV_LDFLAGS vdpau va va-drm va-x11 X11 lzma)
-    #list(APPEND MPV_INC /usr/include/samba-4.0)
-    #list(APPEND MPV_LDFLAGS smbclient)
-    #list(APPEND MPV_SRC ${CMAKE_CURRENT_SOURCE_DIR}/stream/stream_smb.c)
+    include(FindPkgConfig)
+    pkg_search_module(SDL2 REQUIRED sdl2)
+    list(APPEND MPV_INC ${SDL2_INCLUDE_DIRS})
+    list(APPEND MPV_LDFLAGS ${SDL2_LIBRARIES})
 endif ()
 
 #####################
