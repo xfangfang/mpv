@@ -26,8 +26,10 @@
 #include <unistd.h>
 #include <errno.h>
 
+#if !HAVE_VITA
 #ifndef __MINGW32__
 #include <poll.h>
+#endif
 #endif
 
 #include "osdep/io.h"
@@ -89,6 +91,7 @@ static int fill_buffer(stream_t *s, void *buffer, int max_len)
 {
     struct priv *p = s->priv;
 
+#if !HAVE_VITA
 #ifndef __MINGW32__
     if (p->use_poll) {
         int c = mp_cancel_get_fd(p->cancel);
@@ -100,6 +103,7 @@ static int fill_buffer(stream_t *s, void *buffer, int max_len)
         if (fds[1].revents & POLLIN)
             return -1;
     }
+#endif
 #endif
 
     for (int retries = 0; retries < MAX_RETRIES; retries++) {

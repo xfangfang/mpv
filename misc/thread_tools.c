@@ -19,10 +19,14 @@
 #include <unistd.h>
 #include <errno.h>
 
+#include "config.h"
+
+#if !HAVE_VITA
 #ifdef __MINGW32__
 #include <windows.h>
 #else
 #include <poll.h>
+#endif
 #endif
 
 #include "common/common.h"

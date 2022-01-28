@@ -65,7 +65,11 @@
 #include "screenshot.h"
 
 static const char def_config[] =
+#if HAVE_VITA
+    ""
+#else
 #include "generated/etc/builtin.conf.inc"
+#endif
 ;
 
 #if HAVE_COCOA

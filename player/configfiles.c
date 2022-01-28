@@ -177,6 +177,7 @@ static bool check_mtime(const char *f1, const char *f2)
 
 static bool copy_mtime(const char *f1, const char *f2)
 {
+#if !HAVE_VITA
     struct stat st1, st2;
 
     if (stat(f1, &st1) != 0 || stat(f2, &st2) != 0)
@@ -189,7 +190,7 @@ static bool copy_mtime(const char *f1, const char *f2)
 
     if (utime(f2, &ut) != 0)
         return false;
-
+#endif
     return true;
 }
 

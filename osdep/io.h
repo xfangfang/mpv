@@ -208,6 +208,8 @@ locale_t newlocale(int, const char *, locale_t);
 locale_t uselocale(locale_t);
 void freelocale(locale_t);
 
+#elif HAVE_VITA /* __MINGW32__ */
+
 #else /* __MINGW32__ */
 
 #include <sys/mman.h>

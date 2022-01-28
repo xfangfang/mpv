@@ -61,7 +61,7 @@ bool mp_set_cloexec(int fd)
     return true;
 }
 
-#ifdef __MINGW32__
+#if defined(__MINGW32__) || HAVE_VITA
 int mp_make_cloexec_pipe(int pipes[2])
 {
     pipes[0] = pipes[1] = -1;
@@ -81,7 +81,7 @@ int mp_make_cloexec_pipe(int pipes[2])
 }
 #endif
 
-#ifdef __MINGW32__
+#if defined(__MINGW32__) || HAVE_VITA
 int mp_make_wakeup_pipe(int pipes[2])
 {
     return mp_make_cloexec_pipe(pipes);

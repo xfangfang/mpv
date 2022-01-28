@@ -4290,6 +4290,8 @@ static void replace_overlay(struct MPContext *mpctx, int id, struct overlay *new
     recreate_overlays(mpctx);
 }
 
+#if !HAVE_VITA
+
 static void cmd_overlay_add(void *pcmd)
 {
     struct mp_cmd_ctx *cmd = pcmd;
@@ -4371,6 +4373,8 @@ static void cmd_overlay_remove(void *p)
     if (id >= 0 && id < cmdctx->num_overlays)
         replace_overlay(mpctx, id, &(struct overlay){0});
 }
+
+#endif
 
 static void overlay_uninit(struct MPContext *mpctx)
 {
@@ -6377,6 +6381,7 @@ const struct mp_cmd_def mp_cmds[] = {
                                                     {"args", OPT_STRING(v.s)} },
         .vararg = true },
 
+#if !HAVE_VITA
     { "overlay-add", cmd_overlay_add, { {"id", OPT_INT(v.i)},
                                         {"x", OPT_INT(v.i)},
                                         {"y", OPT_INT(v.i)},
@@ -6387,6 +6392,7 @@ const struct mp_cmd_def mp_cmds[] = {
                                         {"h", OPT_INT(v.i)},
                                         {"stride", OPT_INT(v.i)}, }},
     { "overlay-remove", cmd_overlay_remove, { {"id", OPT_INT(v.i)} } },
+#endif
 
     { "osd-overlay", cmd_osd_overlay,
         {
