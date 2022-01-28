@@ -9,6 +9,12 @@
 #include "f_lavfi.h"
 #include "user_filters.h"
 
+#if HAVE_VITA
+void print_lavfi_help_list(struct mp_log *log, int media_type) {}
+void print_lavfi_help(struct mp_log *log, const char *name, int media_type) {}
+bool mp_lavfi_is_usable(const char *name, int media_type) { return false; }
+#endif
+
 static bool get_desc_from(const struct mp_user_filter_entry **list, int num,
                           struct m_obj_desc *dst, int index)
 {
@@ -29,7 +35,12 @@ static bool check_unknown_entry(const char *name, int media_type)
 }
 
 // --af option
-
+#if HAVE_VITA
+const struct mp_user_filter_entry *af_list[] = {
+    &af_scaletempo2,
+    &af_drop,
+};
+#else
 const struct mp_user_filter_entry *af_list[] = {
     &af_lavfi,
     &af_lavfi_bridge,
@@ -42,6 +53,7 @@ const struct mp_user_filter_entry *af_list[] = {
     &af_lavcac3enc,
     &af_drop,
 };
+#endif
 
 static bool get_af_desc(struct m_obj_desc *dst, int index)
 {
@@ -73,7 +85,9 @@ const struct m_obj_list af_obj_list = {
 };
 
 // --vf option
-
+#if HAVE_VITA
+const struct mp_user_filter_entry *vf_list[] = {};
+#else
 const struct mp_user_filter_entry *vf_list[] = {
     &vf_format,
     &vf_lavfi,
@@ -98,6 +112,7 @@ const struct mp_user_filter_entry *vf_list[] = {
     &vf_gpu,
 #endif
 };
+#endif
 
 static bool get_vf_desc(struct m_obj_desc *dst, int index)
 {
@@ -151,6 +166,7 @@ struct mp_filter *mp_create_user_filter(struct mp_filter *parent,
 
     struct m_obj_desc desc;
     if (!m_obj_list_find(&desc, obj_list, bstr0(name))) {
+#if !HAVE_VITA
         // Generic lavfi bridge.
         if (strncmp(name, "lavfi-", 6) == 0)
             name += 6;
@@ -158,6 +174,7 @@ struct mp_filter *mp_create_user_filter(struct mp_filter *parent,
             mp_lavfi_create_filter(parent, frame_type, true, NULL, name, args);
         if (l)
             f = l->f;
+#endif
         goto done;
     }
 

@@ -28,19 +28,13 @@ set(mpv_core_sources
     audio/chmap.c
     audio/chmap_sel.c
     audio/decode/ad_lavc.c
-    audio/decode/ad_spdif.c
     audio/filter/af_drop.c
-    audio/filter/af_format.c
-    audio/filter/af_lavcac3enc.c
-    audio/filter/af_scaletempo.c
     audio/filter/af_scaletempo2.c
     audio/filter/af_scaletempo2_internals.c
     audio/fmt-conversion.c
     audio/format.c
     audio/out/ao.c
-    audio/out/ao_lavc.c
     audio/out/ao_null.c
-    audio/out/ao_pcm.c
     audio/out/buffer.c
 
     ## Core
@@ -82,8 +76,6 @@ set(mpv_core_sources
     filters/f_auto_filters.c
     filters/f_decoder_wrapper.c
     filters/f_demux_in.c
-    filters/f_hwtransfer.c
-    filters/f_lavfi.c
     filters/f_output_chain.c
     filters/f_swresample.c
     filters/f_swscale.c
@@ -163,9 +155,6 @@ set(mpv_core_sources
     ## Video
     video/csputils.c
     video/decode/vd_lavc.c
-    video/filter/refqueue.c
-    video/filter/vf_format.c
-    video/filter/vf_sub.c
     video/fmt-conversion.c
     video/hwdec.c
     video/image_loader.c
@@ -178,27 +167,8 @@ set(mpv_core_sources
     video/out/dither.c
     video/out/dr_helper.c
     video/out/filter_kernels.c
-    video/out/gpu/context.c
-    video/out/gpu/error_diffusion.c
-    video/out/gpu/hwdec.c
-    video/out/gpu/lcms.c
-    video/out/gpu/libmpv_gpu.c
-    video/out/gpu/osd.c
-    video/out/gpu/ra.c
-    video/out/gpu/shader_cache.c
-    video/out/gpu/spirv.c
-    video/out/gpu/user_shaders.c
-    video/out/gpu/utils.c
-    video/out/gpu/video.c
-    video/out/gpu/video_shaders.c
-    video/out/libmpv_sw.c
     video/out/vo.c
-    video/out/vo_gpu.c
-    video/out/vo_image.c
-    video/out/vo_lavc.c
-    video/out/vo_libmpv.c
     video/out/vo_null.c
-    video/out/vo_tct.c
     video/out/win_state.c
     video/repack.c
     video/sws_utils.c

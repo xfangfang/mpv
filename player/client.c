@@ -2146,10 +2146,12 @@ struct mpv_render_context *
 mp_client_api_acquire_render_context(struct mp_client_api *ca)
 {
     struct mpv_render_context *res = NULL;
+#if !HAVE_VITA
     pthread_mutex_lock(&ca->lock);
     if (ca->render_context && mp_render_context_acquire(ca->render_context))
         res = ca->render_context;
     pthread_mutex_unlock(&ca->lock);
+#endif
     return res;
 }
 

@@ -35,6 +35,14 @@
 #include "common/common.h"
 #include "common/global.h"
 
+#if HAVE_VITA
+extern const struct ao_driver audio_out_null;
+
+static const struct ao_driver * const audio_out_drivers[] = {
+    &audio_out_null,
+    NULL,
+};
+#else
 extern const struct ao_driver audio_out_oss;
 extern const struct ao_driver audio_out_audiotrack;
 extern const struct ao_driver audio_out_audiounit;
@@ -96,6 +104,7 @@ static const struct ao_driver * const audio_out_drivers[] = {
     &audio_out_lavc,
     NULL
 };
+#endif
 
 static bool get_desc(struct m_obj_desc *dst, int index)
 {

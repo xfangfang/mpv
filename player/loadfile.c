@@ -1255,9 +1255,12 @@ static int reinit_complex_filters(struct MPContext *mpctx, bool force_uninit)
         success = true; // normal full removal of graph
         goto done;
     }
-
+#if HAVE_VITA
+    struct mp_lavfi *l = NULL;
+#else
     struct mp_lavfi *l =
         mp_lavfi_create_graph(mpctx->filter_root, 0, false, NULL, graph);
+#endif
     if (!l)
         goto done;
     mpctx->lavfi = l->f;

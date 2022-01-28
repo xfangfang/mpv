@@ -141,6 +141,9 @@ void mp_autoconvert_add_srate(struct mp_autoconvert *c, int rate)
 static bool build_image_converter(struct mp_autoconvert *c, struct mp_log *log,
                                   struct mp_image *img, struct mp_filter **f_out)
 {
+#if HAVE_VITA
+    return true;
+#else
     struct mp_filter *f = c->f;
     struct priv *p = f->priv;
 
@@ -274,6 +277,7 @@ static bool build_image_converter(struct mp_autoconvert *c, struct mp_log *log,
 fail:
     talloc_free(conv);
     return false;
+#endif
 }
 
 bool mp_autoconvert_probe_input_video(struct mp_autoconvert *c,

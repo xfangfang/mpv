@@ -780,9 +780,11 @@ static const m_option_t mp_opts[] = {
     {"", OPT_SUBSTRUCT(demux_cache_opts, demux_cache_conf)},
     {"", OPT_SUBSTRUCT(stream_opts, stream_conf)},
 
+#if !HAVE_VITA
     {"", OPT_SUBSTRUCT(ra_ctx_opts, ra_ctx_conf)},
     {"", OPT_SUBSTRUCT(gl_video_opts, gl_video_conf)},
     {"", OPT_SUBSTRUCT(spirv_opts, spirv_conf)},
+#endif
 
 #if HAVE_GL
     {"", OPT_SUBSTRUCT(opengl_opts, opengl_conf)},

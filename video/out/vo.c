@@ -47,6 +47,14 @@
 #include "osdep/io.h"
 #include "osdep/threads.h"
 
+#if HAVE_VITA
+extern const struct vo_driver video_out_null;
+
+const struct vo_driver *const video_out_drivers[] = {
+    &video_out_null,
+    NULL,
+};
+#else
 extern const struct vo_driver video_out_mediacodec_embed;
 extern const struct vo_driver video_out_x11;
 extern const struct vo_driver video_out_vdpau;
@@ -117,6 +125,7 @@ const struct vo_driver *const video_out_drivers[] =
     &video_out_lavc,
     NULL
 };
+#endif
 
 struct vo_internal {
     pthread_t thread;
@@ -317,9 +326,13 @@ static struct vo *vo_create(bool probing, struct mpv_global *global,
     m_config_cache_set_dispatch_change_cb(vo->opts_cache, vo->in->dispatch,
                                           update_opts, vo);
 
+#if HAVE_VITA
+    vo->gl_opts_cache = NULL;
+#else
     vo->gl_opts_cache = m_config_cache_alloc(NULL, global, &gl_video_conf);
     m_config_cache_set_dispatch_change_cb(vo->gl_opts_cache, vo->in->dispatch,
                                           update_opts, vo);
+#endif
 
     vo->eq_opts_cache = m_config_cache_alloc(NULL, global, &mp_csp_equalizer_conf);
     m_config_cache_set_dispatch_change_cb(vo->eq_opts_cache, vo->in->dispatch,

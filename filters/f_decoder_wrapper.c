@@ -417,6 +417,7 @@ static bool reinit_decoder(struct priv *p)
         user_list = p->opts->audio_decoders;
         fallback = "aac";
 
+#if !HAVE_VITA
         pthread_mutex_lock(&p->cache_lock);
         bool try_spdif = p->try_spdif;
         pthread_mutex_unlock(&p->cache_lock);
@@ -431,6 +432,7 @@ static bool reinit_decoder(struct priv *p)
                 talloc_free(spdif);
             }
         }
+#endif
     }
 
     if (!list) {
