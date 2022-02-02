@@ -277,7 +277,7 @@ target_link_libraries(mpv-core
 )
 
 target_include_directories(mpv-core PRIVATE
-    osdep/vita
+    osdep/vita/include
     ${_core_gen_dir}
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${_pkg_ass_INCLUDE_DIRS}
