@@ -36,9 +36,11 @@
 #include "common/global.h"
 
 #if HAVE_VITA
+extern const struct ao_driver audio_out_vita;
 extern const struct ao_driver audio_out_null;
 
 static const struct ao_driver * const audio_out_drivers[] = {
+    &audio_out_vita,
     &audio_out_null,
     NULL,
 };

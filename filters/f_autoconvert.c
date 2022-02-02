@@ -141,9 +141,6 @@ void mp_autoconvert_add_srate(struct mp_autoconvert *c, int rate)
 static bool build_image_converter(struct mp_autoconvert *c, struct mp_log *log,
                                   struct mp_image *img, struct mp_filter **f_out)
 {
-#if HAVE_VITA
-    return true;
-#else
     struct mp_filter *f = c->f;
     struct priv *p = f->priv;
 
@@ -199,6 +196,10 @@ static bool build_image_converter(struct mp_autoconvert *c, struct mp_log *log,
     // Source is hw, some targets are sw -> try to download.
     bool hw_to_sw = !imgfmt_is_sw && dst_have_sw;
 
+
+#if HAVE_VITA
+    int src_fmt = img->imgfmt;
+#else
     if (sw_to_hw && num_fmts > 0) {
         // We can probably use this! Very lazy and very approximate.
         struct mp_hwupload *upload = mp_hwupload_create(conv, fmts[0]);
@@ -233,6 +234,7 @@ static bool build_image_converter(struct mp_autoconvert *c, struct mp_log *log,
             mp_image_params_guess_csp(&imgpar);
         }
     }
+#endif
 
     if (p->imgparams_set) {
         force_sws_params |= !mp_image_params_equal(&imgpar, &p->imgparams);
@@ -277,7 +279,6 @@ static bool build_image_converter(struct mp_autoconvert *c, struct mp_log *log,
 fail:
     talloc_free(conv);
     return false;
-#endif
 }
 
 bool mp_autoconvert_probe_input_video(struct mp_autoconvert *c,

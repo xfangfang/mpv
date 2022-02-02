@@ -40,7 +40,7 @@
 #define HAVE_GL_X11                             0
 #define HAVE_GLOB                               0
 #define HAVE_GLOB_POSIX                         0
-#define HAVE_GPL                                0
+#define HAVE_GPL                                1
 #define HAVE_ICONV                              0
 #define HAVE_IOS_GL                             0
 #define HAVE_JACK                               0

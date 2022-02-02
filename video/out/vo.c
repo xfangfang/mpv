@@ -48,9 +48,11 @@
 #include "osdep/threads.h"
 
 #if HAVE_VITA
+extern const struct vo_driver video_out_vita;
 extern const struct vo_driver video_out_null;
 
 const struct vo_driver *const video_out_drivers[] = {
+    &video_out_vita,
     &video_out_null,
     NULL,
 };
