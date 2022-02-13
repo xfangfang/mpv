@@ -4,7 +4,6 @@
 #include <stdint.h>
 
 #include "misc/dispatch.h"
-#include "video/img_format.h"
 
 #define VITA_SCREEN_W 960
 #define VITA_SCREEN_H 544
@@ -18,8 +17,10 @@ struct ui_context {
     void *priv_render;
     struct ui_context_internal *internal;
     struct mp_dispatch_queue *dispatch;
-    struct ui_texture *video_textures[MP_MAX_PLANES];
-    int video_texture_count;
+
+    void *video_ctx;
+    void (*video_draw_cb)(void *p);
+    void (*video_uninit_cb)(void *p);
 };
 
 struct ui_platform_driver {

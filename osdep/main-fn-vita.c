@@ -48,9 +48,8 @@ static void handle_redraw(struct ui_context *ctx)
 
     ctx->internal->flags &= ~INTERNAL_FLAG_REDRAW;
     ui_render_driver_vita.render_start(ctx);
-    for (int i = 0; i < ctx->video_texture_count; ++i) {
-        ui_render_driver_vita.texture_draw(ctx, ctx->video_textures[i], 0, 0, 1, 1);
-    }
+    if (ctx->video_draw_cb)
+        ctx->video_draw_cb(ctx->video_ctx);
     ui_render_driver_vita.render_end(ctx);
 }
 
@@ -84,14 +83,10 @@ static void on_dispatch_wakeup(void *p)
 static void ui_context_destroy(void *p)
 {
     struct ui_context *ctx = p;
-    for (int i = 0; i < ctx->video_texture_count; ++i) {
-        struct ui_texture **p_texture = &ctx->video_textures[i];
-        if (*p_texture)
-            ui_render_driver_vita.texture_uninit(ctx, p_texture);
-    }
-    ctx->video_texture_count = 0;
     pthread_mutex_destroy(&ctx->internal->lock);
     pthread_cond_destroy(&ctx->internal->wakeup);
+    if (ctx->video_uninit_cb)
+        ctx->video_uninit_cb(ctx->video_ctx);
     if (ctx->priv_render)
         ui_render_driver_vita.uninit(ctx);
     if (ctx->priv_platform)
