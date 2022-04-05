@@ -4,6 +4,8 @@
 
 #include <GLFW/glfw3.h>
 
+#define TEXTURE_BUFFER_SIZE     (1024 * 1024 * 4)
+
 extern const struct ao_driver audio_out_alsa;
 struct ao_driver audio_out_vita;
 
@@ -23,12 +25,15 @@ struct priv_render {
         GLuint shader_frag;
         GLuint u_texture;
     } program_draw_tex;
+
+    void *buffer;
 };
 
 struct ui_texture {
     GLuint id;
     int w;
     int h;
+    enum ui_tex_fmt fmt;
 };
 
 static struct priv_platform *get_priv_platform(struct ui_context *ctx)
@@ -196,7 +201,9 @@ error:
 
 static bool render_init(struct ui_context *ctx)
 {
-    return render_init_programe_draw_tex(ctx->priv_render);
+    struct priv_render *priv = ctx->priv_render;
+    return render_init_programe_draw_tex(priv) &&
+           (priv->buffer = malloc(TEXTURE_BUFFER_SIZE));
 }
 
 static void render_uninit(struct ui_context *ctx)
@@ -205,6 +212,11 @@ static void render_uninit(struct ui_context *ctx)
     delete_program_checked(&priv->program_draw_tex.program);
     delete_shader_checked(&priv->program_draw_tex.shader_vert);
     delete_shader_checked(&priv->program_draw_tex.shader_frag);
+
+    if (priv->buffer) {
+        free(priv->buffer);
+        priv->buffer = NULL;
+    }
 }
 
 static void render_render_start(struct ui_context *ctx)
@@ -221,23 +233,23 @@ static void render_render_end(struct ui_context *ctx)
     glfwPollEvents();
 }
 
-static bool render_texture_is_supported(int fmt)
-{
-    return fmt == IMGFMT_RGBA;
-}
-
 static bool render_texture_init(struct ui_context *ctx, struct ui_texture **tex,
-                                int fmt, int w, int h)
+                                enum ui_tex_fmt fmt, int w, int h)
 {
     struct ui_texture *new_tex = malloc(sizeof(struct ui_texture));
     new_tex->w = w;
     new_tex->h = h;
-    glGenTextures(1, &new_tex->id);
-    glBindTexture(GL_TEXTURE_2D, new_tex->id);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    new_tex->fmt = fmt;
+
+    if (fmt == TEX_FMT_RGBA) {
+        glGenTextures(1, &new_tex->id);
+        glBindTexture(GL_TEXTURE_2D, new_tex->id);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    }
 
     *tex = new_tex;
     return true;
@@ -245,31 +257,89 @@ static bool render_texture_init(struct ui_context *ctx, struct ui_texture **tex,
 
 static void render_texture_uninit(struct ui_context *ctx, struct ui_texture **tex)
 {
-    glDeleteTextures(1, &(*tex)->id);
+    if ((*tex)->fmt == TEX_FMT_RGBA) {
+        glDeleteTextures(1, &(*tex)->id);
+    }
     *tex = NULL;
 }
 
-static void render_texture_upload(struct ui_context *ctx, struct ui_texture *tex,
-                                  void *data, int stride)
+static void upload_texture_buffered(GLuint id, void *data, int w, int h, int stride, int bpp,
+                                    GLenum fmt, GLenum type, void *buffer, int capacity)
 {
-    char *src = data;
-    char *dst = data;
-    int row = tex->w * 4;
-    for (int i = 0; i < tex->h; ++i) {
-        if (src != dst)
-            memmove(dst, src, row);
-        src += stride;
-        dst += row;
-    }
+    glBindTexture(GL_TEXTURE_2D, id);
 
-    glBindTexture(GL_TEXTURE_2D, tex->id);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                 tex->w, tex->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    int row = 0;
+    int col = 0;
+    uint8_t *cur = data;
+    uint8_t *next = cur + stride;
+    int row_bytes = w * bpp;
+    while (row < h) {
+        // caculate readable bytes in current row
+        int available_bytes = capacity;
+        int read_bytes = MPMIN((w - col) * bpp, available_bytes);
+        int read_pixels = read_bytes / bpp;
+        if (read_bytes == 0) {
+            // unless the buffer is too small
+            return;
+        }
+
+        // texture upload area
+        int dst_x = col;
+        int dst_y = row;
+        int dst_w = read_pixels;
+        int dst_h = 1;
+
+        uint8_t *dst_p = buffer;
+        memcpy(dst_p, cur, read_bytes);
+        cur += read_bytes;
+        col += read_pixels;
+        dst_p += read_bytes;
+        available_bytes -= read_bytes;
+
+        if (col == w) {
+            // swith to next row
+            ++row;
+            col = 0;
+            cur = next;
+            next += stride;
+
+            // copy as many rows as we can
+            if (dst_x == 0) {
+                int row_count = MPMIN((available_bytes / row_bytes), (h - row));
+                for (int i = 0; i < row_count; ++i) {
+                    memcpy(dst_p, cur, row_bytes);
+                    ++row;
+                    ++dst_h;
+                    cur = next;
+                    next += stride;
+                    dst_p += row_bytes;
+                }
+            }
+        }
+
+        // finish current batch
+        glTexSubImage2D(GL_TEXTURE_2D, 0, dst_x, dst_y, dst_w, dst_h, fmt, type, buffer);
+    }
+}
+
+static void render_texture_upload(struct ui_context *ctx, struct ui_texture *tex,
+                                  void **data, int *strides, int planes)
+{
+    struct priv_render *priv_render = ctx->priv_render;
+    if (tex->fmt == TEX_FMT_RGBA) {
+        upload_texture_buffered(tex->id, data[0], tex->w, tex->h, strides[0], 4,
+                                GL_RGBA, GL_UNSIGNED_BYTE,
+                                priv_render->buffer, TEXTURE_BUFFER_SIZE);
+    }
 }
 
 static void render_texture_draw(struct ui_context *ctx, struct ui_texture *tex,
                                 float x, float y, float sx, float sy)
 {
+    if (tex->fmt != TEX_FMT_RGBA) {
+        return;
+    }
+
     const GLfloat draw_vertices[] = {
         -1.0f,  1.0f,
         -1.0f, -1.0f,
@@ -312,7 +382,6 @@ const struct ui_render_driver ui_render_driver_vita = {
     .render_start = render_render_start,
     .render_end = render_render_end,
 
-    .texture_is_supported = render_texture_is_supported,
     .texture_init = render_texture_init,
     .texture_uninit = render_texture_uninit,
     .texture_upload = render_texture_upload,

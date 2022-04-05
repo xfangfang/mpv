@@ -5,19 +5,23 @@
 #include "video/mp_image.h"
 #include "video/img_format.h"
 
+struct tex_params {
+    int w;
+    int h;
+    enum ui_tex_fmt fmt;
+};
+
 struct priv_draw {
-    int count;
-    struct ui_texture *textures[MP_MAX_PLANES];
+    struct ui_texture *texture;
     struct ui_context *context;
-    struct {
-        mp_image_t *image;
-        pthread_mutex_t *lock;
-    } shared_data;
+    mp_image_t *image;
+    pthread_mutex_t *lock;
 };
 
 struct priv_vo {
-    struct priv_draw *draw_ctx;
     pthread_mutex_t lock;
+    struct priv_draw *draw_ctx;
+    struct tex_params *tex_params;
 };
 
 static struct ui_context *get_ui_context(struct vo *vo)
@@ -42,49 +46,72 @@ static void do_run_request_redraw(void *vo)
     ui_request_redraw(get_ui_context(vo));
 }
 
-static void do_run_update_textures(void *vo)
+static void do_run_update_texture(void *vo)
 {
     struct ui_context *ctx = get_ui_context(vo);
     struct priv_draw *priv_draw = ctx->video_ctx;
-    pthread_mutex_lock(priv_draw->shared_data.lock);
-    mp_image_t *image = priv_draw->shared_data.image;
-    priv_draw->count = image ? image->num_planes : 0;
-    for (int i = 0; i < priv_draw->count; ++i) {
-        struct ui_texture **tex = &priv_draw->textures[i];
-        if (!*tex) {
-            int w = image->w;
-            int h = image->h;
-            ui_render_driver_vita.texture_init(ctx, tex, image->imgfmt, w, h);
-        }
-        ui_render_driver_vita.texture_upload(ctx, *tex, image->planes[i], image->stride[i]);
+    struct ui_texture *texture = priv_draw->texture;
+    pthread_mutex_lock(priv_draw->lock);
+    mp_image_t *image = priv_draw->image;
+    if (image && texture) {
+        void *planes[MP_MAX_PLANES];
+        for (int i = 0; i < MP_MAX_PLANES; ++i)
+            planes[i] = image->planes[i];
+        ui_render_driver_vita.texture_upload(ctx, texture, planes, image->stride, image->num_planes);
     }
-    pthread_mutex_unlock(priv_draw->shared_data.lock);
+    pthread_mutex_unlock(priv_draw->lock);
+}
+
+static void do_run_init_texture(void *vo)
+{
+    struct vo *vo_cast = vo;
+    struct priv_vo *priv_vo = vo_cast->priv;
+    pthread_mutex_lock(&priv_vo->lock);
+    if (priv_vo->tex_params) {
+        struct tex_params *params = priv_vo->tex_params;
+        struct ui_context *ctx = get_ui_context(vo);
+        struct ui_texture **p_tex = &priv_vo->draw_ctx->texture;
+        if (*p_tex) {
+            ui_render_driver_vita.texture_uninit(ctx, p_tex);
+        }
+        ui_render_driver_vita.texture_init(ctx, p_tex, params->fmt, params->w, params->h);
+        TA_FREEP(&priv_vo->tex_params);
+    }
+    pthread_mutex_unlock(&priv_vo->lock);
+}
+
+static enum ui_tex_fmt resolve_tex_fmt(int fmt)
+{
+    switch (fmt) {
+    case IMGFMT_RGBA:
+        return TEX_FMT_RGBA;
+    default:
+        return TEX_FMT_UNKNOWN;
+    }
+}
+
+static int query_format(struct vo *vo, int format)
+{
+    return resolve_tex_fmt(format) != TEX_FMT_UNKNOWN;
 }
 
 static void do_video_draw(void *video_ctx)
 {
     struct priv_draw *priv = video_ctx;
     struct ui_context *ctx = priv->context;
-    pthread_mutex_lock(priv->shared_data.lock);
-    for (int i = 0; i < priv->count; ++i)
-        ui_render_driver_vita.texture_draw(ctx, priv->textures[i], 0, 0, 1, 1);
-    pthread_mutex_unlock(priv->shared_data.lock);
-}
-
-static int query_format(struct vo *vo, int format)
-{
-    return ui_render_driver_vita.texture_is_supported(format);
+    pthread_mutex_lock(priv->lock);
+    if (priv->texture)
+        ui_render_driver_vita.texture_draw(ctx, priv->texture, 0, 0, 1, 1);
+    pthread_mutex_unlock(priv->lock);
 }
 
 static void do_video_uninit(void *video_ctx)
 {
     struct priv_draw *priv = video_ctx;
     struct ui_context *ctx = priv->context;
-    for (int i = 0; i < priv->count; ++i)
-        ui_render_driver_vita.texture_uninit(ctx, &priv->textures[i]);
-    talloc_free(priv->shared_data.image);
-    priv->count = 0;
-    priv->shared_data.image = NULL;
+    if (priv->texture)
+        ui_render_driver_vita.texture_uninit(ctx, &priv->texture);
+    TA_FREEP(&priv->image);
 
     ctx->video_ctx = NULL;
     ctx->video_draw_cb = NULL;
@@ -103,14 +130,15 @@ static void do_run_init_draw_ctx(void *vo)
 
 static int preinit(struct vo *vo)
 {
-    // ui_context modification should be run on main thread
     struct ui_context *ctx = get_ui_context(vo);
     struct priv_vo *priv_vo = vo->priv;
     struct priv_draw *priv_draw = talloc_zero_size(ctx, sizeof(struct priv_draw));
     pthread_mutex_init(&priv_vo->lock, NULL);
     priv_vo->draw_ctx = priv_draw;
     priv_draw->context = ctx;
-    priv_draw->shared_data.lock = &priv_vo->lock;
+    priv_draw->lock = &priv_vo->lock;
+
+    // ui_context field assignments should be run on main thread
     post_main_thread_cb(vo, do_run_init_draw_ctx);
     return 0;
 }
@@ -123,7 +151,8 @@ static void uninit(struct vo *vo)
     pthread_mutex_destroy(&priv->lock);
     cancel_main_thread_cb(vo, do_run_init_draw_ctx);
     cancel_main_thread_cb(vo, do_run_request_redraw);
-    cancel_main_thread_cb(vo, do_run_update_textures);
+    cancel_main_thread_cb(vo, do_run_init_texture);
+    cancel_main_thread_cb(vo, do_run_update_texture);
 }
 
 static void flip_page(struct vo *vo)
@@ -133,24 +162,36 @@ static void flip_page(struct vo *vo)
 
 static int reconfig(struct vo *vo, struct mp_image_params *params)
 {
+    // reinit video texture
+    struct priv_vo *priv_vo = vo->priv;
+    pthread_mutex_lock(&priv_vo->lock);
+    TA_FREEP(&priv_vo->tex_params);
+    priv_vo->tex_params = talloc_zero_size(priv_vo, sizeof(struct tex_params));
+    *priv_vo->tex_params = (struct tex_params) {
+        .w = params->w,
+        .h = params->h,
+        .fmt = resolve_tex_fmt(params->imgfmt),
+    };
+    pthread_mutex_unlock(&priv_vo->lock);
+    post_main_thread_cb(vo, do_run_init_texture);
+
+
     //TODO adjust video size and position
     return 0;
 }
 
 static void draw_frame(struct vo *vo, struct vo_frame *frame)
 {
+    // swap current image ref
     struct priv_vo *priv = vo->priv;
     pthread_mutex_lock(&priv->lock);
-    mp_image_t **p_image = &priv->draw_ctx->shared_data.image;
-    if (*p_image) {
-        talloc_free(*p_image);
-        *p_image = NULL;
-    }
+    TA_FREEP(&priv->draw_ctx->image);
     if (frame->current)
-        *p_image = mp_image_new_ref(frame->current);
+        priv->draw_ctx->image = mp_image_new_ref(frame->current);
     pthread_mutex_unlock(&priv->lock);
 
-    post_main_thread_cb(vo, do_run_update_textures);
+    // update video texutre
+    post_main_thread_cb(vo, do_run_update_texture);
 }
 
 static int control(struct vo *vo, uint32_t request, void *data)
