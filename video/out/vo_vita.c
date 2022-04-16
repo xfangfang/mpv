@@ -1,28 +1,37 @@
-#include <pthread.h>
-
 #include "vo.h"
 #include "osdep/vita/ui.h"
 #include "video/mp_image.h"
 #include "video/img_format.h"
 
-struct tex_params {
+enum render_act {
+    RENDER_ACT_INIT,
+    RENDER_ACT_REDRAW,
+    RENDER_ACT_TEX_INIT,
+    RENDER_ACT_TEX_UPDATE,
+    RENDER_ACT_MAX,
+};
+
+struct init_tex_data {
     int w;
     int h;
     enum ui_tex_fmt fmt;
+    struct ui_context *ctx;
+};
+
+struct update_tex_data {
+    struct ui_context *ctx;
+    struct mp_image *image;
 };
 
 struct priv_draw {
-    struct ui_texture *texture;
-    struct ui_context *context;
-    mp_image_t *image;
-    pthread_mutex_t *lock;
+    struct ui_texture *video_tex;
 };
 
 struct priv_vo {
-    pthread_mutex_t lock;
-    struct priv_draw *draw_ctx;
-    struct tex_params *tex_params;
+    void *cb_data_slots[RENDER_ACT_MAX];
 };
+
+static mp_dispatch_fn get_render_act_fn(enum render_act act);
 
 static struct ui_context *get_ui_context(struct vo *vo)
 {
@@ -31,53 +40,40 @@ static struct ui_context *get_ui_context(struct vo *vo)
     return (struct ui_context*) vo->opts->WinID;
 }
 
-static void post_main_thread_cb(struct vo *vo, mp_dispatch_fn func)
+static void render_act_do_modify(struct vo *vo, enum render_act act, void *data, bool steal)
 {
-    mp_dispatch_enqueue_notify(get_ui_context(vo)->dispatch, func, vo);
-}
+    mp_dispatch_fn func = get_render_act_fn(act);
+    if (!func)
+        return;
 
-static void cancel_main_thread_cb(struct vo *vo, mp_dispatch_fn func)
-{
-    mp_dispatch_cancel_fn(get_ui_context(vo)->dispatch, func, vo);
-}
-
-static void do_run_request_redraw(void *vo)
-{
-    ui_request_redraw(get_ui_context(vo));
-}
-
-static void do_run_update_texture(void *vo)
-{
+    // cancel pending action
+    struct priv_vo *priv = vo->priv;
     struct ui_context *ctx = get_ui_context(vo);
-    struct priv_draw *priv_draw = ctx->video_ctx;
-    struct ui_texture *texture = priv_draw->texture;
-    pthread_mutex_lock(priv_draw->lock);
-    mp_image_t *image = priv_draw->image;
-    if (image && texture) {
-        void *planes[MP_MAX_PLANES];
-        for (int i = 0; i < MP_MAX_PLANES; ++i)
-            planes[i] = image->planes[i];
-        ui_render_driver_vita.texture_upload(ctx, texture, planes, image->stride, image->num_planes);
+    mp_dispatch_cancel_fn(ctx->dispatch, func, priv->cb_data_slots[act]);
+
+    // enqueue new action
+    priv->cb_data_slots[act] = data;
+    if (data) {
+        if (steal)
+            mp_dispatch_enqueue_autofree(ctx->dispatch, func, data);
+        else
+            mp_dispatch_enqueue(ctx->dispatch, func, data);
     }
-    pthread_mutex_unlock(priv_draw->lock);
 }
 
-static void do_run_init_texture(void *vo)
+static void render_act_post_ref(struct vo *vo, enum render_act act, void *data)
 {
-    struct vo *vo_cast = vo;
-    struct priv_vo *priv_vo = vo_cast->priv;
-    pthread_mutex_lock(&priv_vo->lock);
-    if (priv_vo->tex_params) {
-        struct tex_params *params = priv_vo->tex_params;
-        struct ui_context *ctx = get_ui_context(vo);
-        struct ui_texture **p_tex = &priv_vo->draw_ctx->texture;
-        if (*p_tex) {
-            ui_render_driver_vita.texture_uninit(ctx, p_tex);
-        }
-        ui_render_driver_vita.texture_init(ctx, p_tex, params->fmt, params->w, params->h);
-        TA_FREEP(&priv_vo->tex_params);
-    }
-    pthread_mutex_unlock(&priv_vo->lock);
+    render_act_do_modify(vo, act, data, false);
+}
+
+static void render_act_post_steal(struct vo *vo, enum render_act act, void *data)
+{
+    render_act_do_modify(vo, act, data, true);
+}
+
+static void render_act_remove(struct vo *vo, enum render_act act)
+{
+    render_act_do_modify(vo, act, NULL, false);
 }
 
 static enum ui_tex_fmt resolve_tex_fmt(int fmt)
@@ -95,108 +91,125 @@ static int query_format(struct vo *vo, int format)
     return resolve_tex_fmt(format) != TEX_FMT_UNKNOWN;
 }
 
-static void do_video_draw(void *video_ctx)
+static void do_video_draw(struct ui_context *ctx)
 {
-    struct priv_draw *priv = video_ctx;
-    struct ui_context *ctx = priv->context;
-    pthread_mutex_lock(priv->lock);
-    if (priv->texture)
-        ui_render_driver_vita.texture_draw(ctx, priv->texture, 0, 0, 1, 1);
-    pthread_mutex_unlock(priv->lock);
+    struct priv_draw *priv = ctx->video_ctx;
+    if (priv && priv->video_tex)
+        ui_render_driver_vita.texture_draw(ctx, priv->video_tex, 0, 0, 1, 1);
 }
 
-static void do_video_uninit(void *video_ctx)
+static void do_video_uninit(struct ui_context *ctx)
 {
-    struct priv_draw *priv = video_ctx;
-    struct ui_context *ctx = priv->context;
-    if (priv->texture)
-        ui_render_driver_vita.texture_uninit(ctx, &priv->texture);
-    TA_FREEP(&priv->image);
+    struct priv_draw *priv = ctx->video_ctx;
+    if (priv && priv->video_tex)
+        ui_render_driver_vita.texture_uninit(ctx, &priv->video_tex);
 
     ctx->video_ctx = NULL;
     ctx->video_draw_cb = NULL;
     ctx->video_uninit_cb = NULL;
 }
 
-static void do_run_init_draw_ctx(void *vo)
+static void do_render_init_draw_ctx(void *p)
 {
-    struct vo *vo_cast = vo;
-    struct priv_vo *priv = vo_cast->priv;
-    struct ui_context *ctx = get_ui_context(vo);
-    ctx->video_ctx = priv->draw_ctx;
+    struct ui_context *ctx = p;
+    struct priv_draw *priv = talloc_zero_size(ctx, sizeof(*priv));
+    ctx->video_ctx = priv;
     ctx->video_draw_cb = do_video_draw;
     ctx->video_uninit_cb = do_video_uninit;
 }
 
 static int preinit(struct vo *vo)
 {
-    struct ui_context *ctx = get_ui_context(vo);
-    struct priv_vo *priv_vo = vo->priv;
-    struct priv_draw *priv_draw = talloc_zero_size(ctx, sizeof(struct priv_draw));
-    pthread_mutex_init(&priv_vo->lock, NULL);
-    priv_vo->draw_ctx = priv_draw;
-    priv_draw->context = ctx;
-    priv_draw->lock = &priv_vo->lock;
-
-    // ui_context field assignments should be run on main thread
-    post_main_thread_cb(vo, do_run_init_draw_ctx);
+    struct priv_vo *priv = vo->priv;
+    memset(priv->cb_data_slots, 0, sizeof(priv->cb_data_slots));
+    render_act_post_ref(vo, RENDER_ACT_INIT, get_ui_context(vo));
     return 0;
 }
 
 static void uninit(struct vo *vo)
 {
-    // main thread is waiting for MPV uninit now,
-    // it should be safe to free mutex here
-    struct priv_vo *priv = vo->priv;
-    pthread_mutex_destroy(&priv->lock);
-    cancel_main_thread_cb(vo, do_run_init_draw_ctx);
-    cancel_main_thread_cb(vo, do_run_request_redraw);
-    cancel_main_thread_cb(vo, do_run_init_texture);
-    cancel_main_thread_cb(vo, do_run_update_texture);
+    for (int i = 0; i < RENDER_ACT_MAX; ++i)
+        render_act_remove(vo, i);
+}
+
+static void do_render_redraw(void *p)
+{
+    ui_request_redraw(p);
 }
 
 static void flip_page(struct vo *vo)
 {
-    post_main_thread_cb(vo, do_run_request_redraw);
+    render_act_post_ref(vo, RENDER_ACT_REDRAW, get_ui_context(vo));
+}
+
+static void do_render_init_texture(void *p)
+{
+    // reinit video texture
+    struct init_tex_data *data = p;
+    struct priv_draw *priv = data->ctx->video_ctx;
+    if (priv->video_tex)
+        ui_render_driver_vita.texture_uninit(data->ctx, &priv->video_tex);
+    ui_render_driver_vita.texture_init(data->ctx, &priv->video_tex, data->fmt, data->w, data->h);
 }
 
 static int reconfig(struct vo *vo, struct mp_image_params *params)
 {
-    // reinit video texture
-    struct priv_vo *priv_vo = vo->priv;
-    pthread_mutex_lock(&priv_vo->lock);
-    TA_FREEP(&priv_vo->tex_params);
-    priv_vo->tex_params = talloc_zero_size(priv_vo, sizeof(struct tex_params));
-    *priv_vo->tex_params = (struct tex_params) {
+    struct init_tex_data *data = ta_new_ptrtype(NULL, data);
+    *data = (struct init_tex_data) {
+        .ctx = get_ui_context(vo),
         .w = params->w,
         .h = params->h,
         .fmt = resolve_tex_fmt(params->imgfmt),
     };
-    pthread_mutex_unlock(&priv_vo->lock);
-    post_main_thread_cb(vo, do_run_init_texture);
-
+    render_act_remove(vo, RENDER_ACT_TEX_UPDATE);
+    render_act_post_steal(vo, RENDER_ACT_TEX_INIT, data);
 
     //TODO adjust video size and position
     return 0;
 }
 
+static void do_render_update_texture(void *p)
+{
+    struct update_tex_data *data = p;
+    struct priv_draw *priv = data->ctx->video_ctx;
+    struct mp_image *image = data->image;
+    void *planes[MP_MAX_PLANES];
+    for (int i = 0; i < MP_MAX_PLANES; ++i)
+        planes[i] = image->planes[i];
+    ui_render_driver_vita.texture_upload(data->ctx, priv->video_tex, planes, image->stride, image->num_planes);
+}
+
 static void draw_frame(struct vo *vo, struct vo_frame *frame)
 {
-    // swap current image ref
-    struct priv_vo *priv = vo->priv;
-    pthread_mutex_lock(&priv->lock);
-    TA_FREEP(&priv->draw_ctx->image);
-    if (frame->current)
-        priv->draw_ctx->image = mp_image_new_ref(frame->current);
-    pthread_mutex_unlock(&priv->lock);
-
-    // update video texutre
-    post_main_thread_cb(vo, do_run_update_texture);
+    struct mp_image *image = mp_image_new_ref(frame->current);
+    struct update_tex_data *data = ta_new_ptrtype(NULL, data);
+    *data = (struct update_tex_data) {
+        .ctx = get_ui_context(vo),
+        .image = ta_steal(data, image),
+    };
+    render_act_post_steal(vo, RENDER_ACT_TEX_UPDATE, data);
 }
 
 static int control(struct vo *vo, uint32_t request, void *data)
 {
     return VO_NOTIMPL;
+}
+
+static mp_dispatch_fn get_render_act_fn(enum render_act act)
+{
+    switch (act) {
+    case RENDER_ACT_INIT:
+        return do_render_init_draw_ctx;
+    case RENDER_ACT_REDRAW:
+        return do_render_redraw;
+    case RENDER_ACT_TEX_INIT:
+        return do_render_init_texture;
+    case RENDER_ACT_TEX_UPDATE:
+        return do_render_update_texture;
+    case RENDER_ACT_MAX:
+        return NULL;
+    }
+    return NULL;
 }
 
 const struct vo_driver video_out_vita = {

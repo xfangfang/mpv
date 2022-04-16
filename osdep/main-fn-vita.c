@@ -8,8 +8,10 @@
 
 #define FRAME_INTERVAL_US (1 * 1000 * 1000 / 60)
 
-#define INTERNAL_FLAG_REDRAW (1)
-#define INTERNAL_FLAG_MPV_SHUTDOWN (1 << 1)
+enum {
+    INTERNAL_FLAG_REDRAW = 1 << 0,
+    INTERNAL_FLAG_MPV_SHUTDOWN = 1 << 1,
+};
 
 struct ui_context_internal {
     int flags;
@@ -49,7 +51,7 @@ static void handle_redraw(struct ui_context *ctx)
     ctx->internal->flags &= ~INTERNAL_FLAG_REDRAW;
     ui_render_driver_vita.render_start(ctx);
     if (ctx->video_draw_cb)
-        ctx->video_draw_cb(ctx->video_ctx);
+        ctx->video_draw_cb(ctx);
     ui_render_driver_vita.render_end(ctx);
 }
 
@@ -86,7 +88,7 @@ static void ui_context_destroy(void *p)
     pthread_mutex_destroy(&ctx->internal->lock);
     pthread_cond_destroy(&ctx->internal->wakeup);
     if (ctx->video_uninit_cb)
-        ctx->video_uninit_cb(ctx->video_ctx);
+        ctx->video_uninit_cb(ctx);
     if (ctx->priv_render)
         ui_render_driver_vita.uninit(ctx);
     if (ctx->priv_platform)

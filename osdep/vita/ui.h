@@ -24,8 +24,8 @@ struct ui_context {
     struct mp_dispatch_queue *dispatch;
 
     void *video_ctx;
-    void (*video_draw_cb)(void *p);
-    void (*video_uninit_cb)(void *p);
+    void (*video_draw_cb)(struct ui_context *ctx);
+    void (*video_uninit_cb)(struct ui_context *ctx);
 };
 
 struct ui_platform_driver {
