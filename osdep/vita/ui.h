@@ -33,6 +33,7 @@ struct ui_platform_driver {
     int priv_size;
     bool (*init)(struct ui_context *ctx);
     void (*uninit)(struct ui_context *ctx);
+    void (*poll_events)(struct ui_context *ctx);
 };
 
 struct ui_render_driver {

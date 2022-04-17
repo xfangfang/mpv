@@ -218,6 +218,11 @@ static void platform_uninit(struct ui_context *ctx)
     glfwTerminate();
 }
 
+static void platform_poll_events(struct ui_context *ctx)
+{
+    glfwPollEvents();
+}
+
 static void delete_program(struct gl_draw_tex_program *program)
 {
     if (program->program) {
@@ -312,7 +317,6 @@ static void render_render_end(struct ui_context *ctx)
 {
     struct priv_platform *priv_platform = get_priv_platform(ctx);
     glfwSwapBuffers(priv_platform->window);
-    glfwPollEvents();
 }
 
 static bool render_texture_init(struct ui_context *ctx, struct ui_texture **tex,
@@ -475,6 +479,7 @@ const struct ui_platform_driver ui_platform_driver_vita = {
     .priv_size = sizeof(struct priv_platform),
     .init = platform_init,
     .uninit = platform_uninit,
+    .poll_events = platform_poll_events,
 };
 
 const struct ui_render_driver ui_render_driver_vita = {

@@ -43,6 +43,10 @@ static bool advnace_frame_time(struct ui_context *ctx)
     return false;
 }
 
+static void handle_poll_events(struct ui_context *ctx) {
+    ui_platform_driver_vita.poll_events(ctx);
+}
+
 static void handle_redraw(struct ui_context *ctx)
 {
     if (!(ctx->internal->flags & INTERNAL_FLAG_REDRAW))
@@ -158,8 +162,10 @@ static void main_loop(struct ui_context *ctx)
         handle_mpv_events(ctx);
         mp_dispatch_queue_process(ctx->dispatch, 0);
 
-        if (advnace_frame_time(ctx))
+        if (advnace_frame_time(ctx)) {
+            handle_poll_events(ctx);
             handle_redraw(ctx);
+        }
 
         if (ctx->internal->flags & INTERNAL_FLAG_MPV_SHUTDOWN)
             break;
