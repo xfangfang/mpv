@@ -81,6 +81,8 @@ static enum ui_tex_fmt resolve_tex_fmt(int fmt)
     switch (fmt) {
     case IMGFMT_RGBA:
         return TEX_FMT_RGBA;
+    case IMGFMT_420P:
+        return TEX_FMT_YUV420;
     default:
         return TEX_FMT_UNKNOWN;
     }

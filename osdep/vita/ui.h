@@ -11,6 +11,7 @@
 enum ui_tex_fmt {
     TEX_FMT_UNKNOWN,
     TEX_FMT_RGBA,
+    TEX_FMT_YUV420,
 };
 
 struct ui_texture;

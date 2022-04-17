@@ -9,9 +9,92 @@
 extern const struct ao_driver audio_out_alsa;
 struct ao_driver audio_out_vita;
 
-enum draw_tex_attr {
-    ATTR_DRAW_TEX_POS_DRAW,
-    ATTR_DRAW_TEX_POS_TEX,
+struct gl_attr_spec {
+    const char *name;
+    int pos;
+};
+
+static const char *const shader_vert_source =
+    "attribute vec4 a_draw_pos;"
+    "attribute vec2 a_texture_pos;"
+    "varying vec2 v_texture_pos;"
+    "void main() {"
+    "    gl_Position = a_draw_pos;"
+    "    v_texture_pos = a_texture_pos;"
+    "}";
+
+static const struct gl_attr_spec attr_draw_tex_pos_draw = { .name = "a_draw_pos", .pos = 0, };
+static const struct gl_attr_spec attr_draw_tex_pos_tex = { .name = "a_texture_pos", .pos = 1, };
+
+struct gl_tex_plane_spec {
+    int bpp;
+    int div;
+    GLenum fmt;
+    GLenum type;
+    const char *name;
+};
+
+struct gl_tex_impl_spec {
+    int num_planes;
+    const struct gl_tex_plane_spec *plane_specs;
+    const char *shader_frag_source;
+};
+
+static const struct gl_tex_impl_spec tex_spec_unknown = {
+    .num_planes = 0,
+    .plane_specs = NULL,
+    .shader_frag_source = NULL,
+};
+
+static const struct gl_tex_impl_spec tex_spec_rgba = {
+    .num_planes = 1,
+    .plane_specs = (const struct gl_tex_plane_spec[]) {
+        { 4, 1, GL_RGBA, GL_UNSIGNED_BYTE, "u_texture" },
+    },
+    .shader_frag_source =
+        "precision mediump float;"
+        "varying vec2 v_texture_pos;"
+        "uniform sampler2D u_texture;"
+        "void main() {"
+        "    gl_FragColor = texture2D(u_texture, v_texture_pos);"
+        "}",
+};
+
+static const struct gl_tex_impl_spec tex_spec_yuv420 = {
+    .num_planes = 3,
+    .plane_specs = (const struct gl_tex_plane_spec[]) {
+        { 1, 1, GL_ALPHA, GL_UNSIGNED_BYTE, "u_texture_y" },
+        { 1, 2, GL_ALPHA, GL_UNSIGNED_BYTE, "u_texture_u" },
+        { 1, 2, GL_ALPHA, GL_UNSIGNED_BYTE, "u_texture_v" },
+    },
+    .shader_frag_source =
+        "precision mediump float;"
+        "varying vec2 v_texture_pos;"
+        "uniform sampler2D u_texture_y;"
+        "uniform sampler2D u_texture_u;"
+        "uniform sampler2D u_texture_v;"
+        "const vec3 c_yuv_offset = vec3(-0.0627451017, -0.501960814, -0.501960814);"
+        "const mat3 c_yuv_matrix = mat3("
+        "    1.1644,  1.1644,   1.1644,"
+        "    0,      -0.2132,   2.1124,"
+        "    1.7927, -0.5329,   0"
+        ");"
+        "void main() {"
+        "    mediump vec3 yuv = vec3("
+        "        texture2D(u_texture_y, v_texture_pos).a,"
+        "        texture2D(u_texture_u, v_texture_pos).a,"
+        "        texture2D(u_texture_v, v_texture_pos).a"
+        "    );"
+        "    lowp vec3 rgb = c_yuv_matrix * (yuv + c_yuv_offset);"
+        "    gl_FragColor = vec4(rgb, 1);"
+        "}",
+};
+
+struct gl_draw_tex_program {
+    GLuint program;
+    GLuint shader_vert;
+    GLuint shader_frag;
+    GLuint uniform_textures[MP_MAX_PLANES];
 };
 
 struct priv_platform {
@@ -19,22 +102,43 @@ struct priv_platform {
 };
 
 struct priv_render {
-    struct {
-        GLuint program;
-        GLuint shader_vert;
-        GLuint shader_frag;
-        GLuint u_texture;
-    } program_draw_tex;
-
+    struct gl_draw_tex_program program_draw_tex_rgba;
+    struct gl_draw_tex_program program_draw_tex_yuv420;
     void *buffer;
 };
 
 struct ui_texture {
-    GLuint id;
+    GLuint ids[MP_MAX_PLANES];
     int w;
     int h;
     enum ui_tex_fmt fmt;
 };
+
+static const struct gl_tex_impl_spec *get_gl_tex_impl_spec(enum ui_tex_fmt fmt)
+{
+    switch (fmt) {
+    case TEX_FMT_RGBA:
+        return &tex_spec_rgba;
+    case TEX_FMT_YUV420:
+        return &tex_spec_yuv420;
+    case TEX_FMT_UNKNOWN:
+        return &tex_spec_unknown;
+    }
+    return &tex_spec_unknown;
+}
+
+static struct gl_draw_tex_program *get_gl_draw_tex_program(struct priv_render *priv, enum ui_tex_fmt fmt)
+{
+    switch (fmt) {
+    case TEX_FMT_RGBA:
+        return &priv->program_draw_tex_rgba;
+    case TEX_FMT_YUV420:
+        return &priv->program_draw_tex_yuv420;
+    case TEX_FMT_UNKNOWN:
+        return NULL;
+    }
+    return NULL;
+}
 
 static struct priv_platform *get_priv_platform(struct ui_context *ctx)
 {
@@ -114,19 +218,19 @@ static void platform_uninit(struct ui_context *ctx)
     glfwTerminate();
 }
 
-static void delete_program_checked(GLuint *program)
+static void delete_program(struct gl_draw_tex_program *program)
 {
-    if (program && *program) {
-        glDeleteProgram(*program);
-        *program = 0;
+    if (program->program) {
+        glDeleteProgram(program->program);
+        program->program = 0;
     }
-}
-
-static void delete_shader_checked(GLuint *shader)
-{
-    if (shader && *shader) {
-        glDeleteShader(*shader);
-        *shader = 0;
+    if (program->shader_vert) {
+        glDeleteShader(program->shader_vert);
+        program->shader_vert = 0;
+    }
+    if (program->shader_frag) {
+        glDeleteShader(program->shader_frag);
+        program->shader_frag = 0;
     }
 }
 
@@ -147,72 +251,50 @@ static bool load_shader(const char *source, GLenum type, GLuint *out_shader)
     return true;
 }
 
-static bool render_init_programe_draw_tex(struct priv_render *priv)
+static bool init_program(struct gl_draw_tex_program *program, const struct gl_tex_impl_spec *spec)
 {
-    const char *shader_vert_code =
-            "attribute vec4 a_draw_pos; \n"
-            "attribute vec2 a_texture_pos; \n"
-            "varying vec2 v_texture_pos; \n"
-            "void main() { \n"
-            "    gl_Position = a_draw_pos; \n"
-            "    v_texture_pos = a_texture_pos; \n"
-            "} \n";
-    const char *shader_frag_code =
-            "precision mediump float; \n"
-            "varying vec2 v_texture_pos; \n"
-            "uniform sampler2D u_texture; \n"
-            "void main() { \n"
-            "    gl_FragColor = texture2D(u_texture, v_texture_pos); \n"
-            "} \n";
-
     bool succeed = true;
-    GLuint program = 0;
-    GLuint shader_vert = 0;
-    GLuint shader_frag = 0;
-    succeed &= load_shader(shader_vert_code, GL_VERTEX_SHADER, &shader_vert);
-    succeed &= load_shader(shader_frag_code, GL_FRAGMENT_SHADER, &shader_frag);
+    succeed &= load_shader(shader_vert_source, GL_VERTEX_SHADER, &program->shader_vert);
+    succeed &= load_shader(spec->shader_frag_source, GL_FRAGMENT_SHADER, &program->shader_frag);
     if (!succeed)
         goto error;
 
-    program = glCreateProgram();
-    glAttachShader(program, shader_vert);
-    glAttachShader(program, shader_frag);
-    glBindAttribLocation(program, ATTR_DRAW_TEX_POS_DRAW, "a_draw_pos");
-    glBindAttribLocation(program, ATTR_DRAW_TEX_POS_TEX, "a_texture_pos");
-    glLinkProgram(program);
+    program->program = glCreateProgram();
+    glAttachShader(program->program, program->shader_vert);
+    glAttachShader(program->program, program->shader_frag);
+    glBindAttribLocation(program->program, attr_draw_tex_pos_draw.pos, attr_draw_tex_pos_draw.name);
+    glBindAttribLocation(program->program, attr_draw_tex_pos_tex.pos, attr_draw_tex_pos_tex.name);
+    glLinkProgram(program->program);
 
     GLint linked = 0;
-    glGetProgramiv(program, GL_LINK_STATUS, &linked);
+    glGetProgramiv(program->program, GL_LINK_STATUS, &linked);
     if (!linked)
         goto error;
 
-    priv->program_draw_tex.program = program;
-    priv->program_draw_tex.shader_vert = shader_vert;
-    priv->program_draw_tex.shader_frag = shader_frag;
-    priv->program_draw_tex.u_texture = glGetUniformLocation(program, "u_texture");
+    for (int i = 0; i < spec->num_planes; ++i)
+        program->uniform_textures[i] = glGetUniformLocation(program->program, spec->plane_specs[i].name);
+
     return true;
 
 error:
-    delete_program_checked(&program);
-    delete_shader_checked(&shader_vert);
-    delete_shader_checked(&shader_frag);
+    delete_program(program);
     return false;
 }
 
 static bool render_init(struct ui_context *ctx)
 {
     struct priv_render *priv = ctx->priv_render;
-    return render_init_programe_draw_tex(priv) &&
-           (priv->buffer = malloc(TEXTURE_BUFFER_SIZE));
+    memset(priv, 0, sizeof(struct priv_render));
+    return init_program(&priv->program_draw_tex_rgba, &tex_spec_rgba)
+        && init_program(&priv->program_draw_tex_yuv420, &tex_spec_yuv420)
+        && (priv->buffer = malloc(TEXTURE_BUFFER_SIZE));
 }
 
 static void render_uninit(struct ui_context *ctx)
 {
     struct priv_render *priv = ctx->priv_render;
-    delete_program_checked(&priv->program_draw_tex.program);
-    delete_shader_checked(&priv->program_draw_tex.shader_vert);
-    delete_shader_checked(&priv->program_draw_tex.shader_frag);
-
+    delete_program(&priv->program_draw_tex_rgba);
+    delete_program(&priv->program_draw_tex_yuv420);
     if (priv->buffer) {
         free(priv->buffer);
         priv->buffer = NULL;
@@ -241,14 +323,19 @@ static bool render_texture_init(struct ui_context *ctx, struct ui_texture **tex,
     new_tex->h = h;
     new_tex->fmt = fmt;
 
-    if (fmt == TEX_FMT_RGBA) {
-        glGenTextures(1, &new_tex->id);
-        glBindTexture(GL_TEXTURE_2D, new_tex->id);
+    const struct gl_tex_impl_spec *spec = get_gl_tex_impl_spec(fmt);
+    for (int i = 0; i < spec->num_planes; ++i) {
+        const struct gl_tex_plane_spec *plane = spec->plane_specs + i;
+        int tex_w = w / plane->div;
+        int tex_h = h / plane->div;
+        GLenum *p_tex_id = new_tex->ids + i;
+        glGenTextures(1, p_tex_id);
+        glBindTexture(GL_TEXTURE_2D, *p_tex_id);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+        glTexImage2D(GL_TEXTURE_2D, 0, plane->fmt, tex_w, tex_h, 0, plane->fmt, plane->type, NULL);
     }
 
     *tex = new_tex;
@@ -257,9 +344,9 @@ static bool render_texture_init(struct ui_context *ctx, struct ui_texture **tex,
 
 static void render_texture_uninit(struct ui_context *ctx, struct ui_texture **tex)
 {
-    if ((*tex)->fmt == TEX_FMT_RGBA) {
-        glDeleteTextures(1, &(*tex)->id);
-    }
+    const struct gl_tex_impl_spec *spec = get_gl_tex_impl_spec((*tex)->fmt);
+    if (spec->num_planes > 0)
+        glDeleteTextures(spec->num_planes, (*tex)->ids);
     *tex = NULL;
 }
 
@@ -325,10 +412,17 @@ static void upload_texture_buffered(GLuint id, void *data, int w, int h, int str
 static void render_texture_upload(struct ui_context *ctx, struct ui_texture *tex,
                                   void **data, int *strides, int planes)
 {
+    const struct gl_tex_impl_spec *spec = get_gl_tex_impl_spec(tex->fmt);
+    if (spec->num_planes != planes)
+        return;
+
     struct priv_render *priv_render = ctx->priv_render;
-    if (tex->fmt == TEX_FMT_RGBA) {
-        upload_texture_buffered(tex->id, data[0], tex->w, tex->h, strides[0], 4,
-                                GL_RGBA, GL_UNSIGNED_BYTE,
+    for (int i = 0; i < planes; ++i) {
+        const struct gl_tex_plane_spec *plane = spec->plane_specs + i;
+        int tex_w = tex->w / plane->div;
+        int tex_h = tex->h / plane->div;
+        upload_texture_buffered(tex->ids[i], data[i], tex_w, tex_h,
+                                strides[i], plane->bpp, plane->fmt, plane->type,
                                 priv_render->buffer, TEXTURE_BUFFER_SIZE);
     }
 }
@@ -336,9 +430,14 @@ static void render_texture_upload(struct ui_context *ctx, struct ui_texture *tex
 static void render_texture_draw(struct ui_context *ctx, struct ui_texture *tex,
                                 float x, float y, float sx, float sy)
 {
-    if (tex->fmt != TEX_FMT_RGBA) {
+    const struct gl_tex_impl_spec *spec = get_gl_tex_impl_spec(tex->fmt);
+    if (!spec)
         return;
-    }
+
+    struct priv_render *priv = get_priv_render(ctx);
+    struct gl_draw_tex_program *program = get_gl_draw_tex_program(priv, tex->fmt);
+    if (!program)
+        return;
 
     const GLfloat draw_vertices[] = {
         -1.0f,  1.0f,
@@ -354,15 +453,20 @@ static void render_texture_draw(struct ui_context *ctx, struct ui_texture *tex,
         1.0, 1.0,
     };
 
-    struct priv_render *priv = get_priv_render(ctx);
-    glUseProgram(priv->program_draw_tex.program);
+    glUseProgram(program->program);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, tex->id);
+    glBindTexture(GL_TEXTURE_2D, tex->ids[0]);
 
-    glVertexAttribPointer(ATTR_DRAW_TEX_POS_DRAW, 2, GL_FLOAT, GL_FALSE, 0, draw_vertices);
-    glEnableVertexAttribArray(ATTR_DRAW_TEX_POS_DRAW);
-    glVertexAttribPointer(ATTR_DRAW_TEX_POS_TEX, 2, GL_FLOAT, GL_FALSE, 0, tex_vertices);
-    glEnableVertexAttribArray(ATTR_DRAW_TEX_POS_TEX);
+    glVertexAttribPointer(attr_draw_tex_pos_draw.pos, 2, GL_FLOAT, GL_FALSE, 0, draw_vertices);
+    glEnableVertexAttribArray(attr_draw_tex_pos_draw.pos);
+    glVertexAttribPointer(attr_draw_tex_pos_tex.pos, 2, GL_FLOAT, GL_FALSE, 0, tex_vertices);
+    glEnableVertexAttribArray(attr_draw_tex_pos_tex.pos);
+
+    for (int i = 0; i < spec->num_planes; ++i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, tex->ids[i]);
+        glUniform1i(program->uniform_textures[i], i);
+    }
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
