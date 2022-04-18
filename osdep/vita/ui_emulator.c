@@ -431,8 +431,30 @@ static void render_texture_upload(struct ui_context *ctx, struct ui_texture *tex
     }
 }
 
-static void render_texture_draw(struct ui_context *ctx, struct ui_texture *tex,
-                                float x, float y, float sx, float sy)
+static void normalize_rect(GLfloat *out, struct mp_rect *rect, float w, float h,
+                           float dx, float dy, float sx, float sy)
+{
+    float l = rect ? rect->x0 : 0;
+    float t = rect ? rect->y0 : 0;
+    float r = rect ? rect->x1 : w;
+    float b = rect ? rect->y1 : h;
+    l = (l - dx) / w * sx;
+    t = (t - dy) / h * sy;
+    r = (r - dx) / w * sx;
+    b = (b - dy) / h * sy;
+
+    out[0] = l;
+    out[1] = t;
+    out[2] = l;
+    out[3] = b;
+    out[4] = r;
+    out[5] = t;
+    out[6] = r;
+    out[7] = b;
+}
+
+static void render_draw_texture(struct ui_context *ctx, struct ui_texture *tex,
+                                struct ui_texture_draw_args *args)
 {
     const struct gl_tex_impl_spec *spec = get_gl_tex_impl_spec(tex->fmt);
     if (!spec)
@@ -443,19 +465,16 @@ static void render_texture_draw(struct ui_context *ctx, struct ui_texture *tex,
     if (!program)
         return;
 
-    const GLfloat draw_vertices[] = {
-        -1.0f,  1.0f,
-        -1.0f, -1.0f,
-         1.0f,  1.0f,
-         1.0f, -1.0f,
-    };
+    GLfloat draw_vertices[8];
+    struct mp_rect *dst_rect = args ? args->dst : NULL;
+    normalize_rect(draw_vertices, dst_rect,
+                   VITA_SCREEN_W, VITA_SCREEN_H,
+                   (VITA_SCREEN_W * 0.5f), (VITA_SCREEN_H * 0.5f),
+                   2.0f, 2.0f);
 
-    const GLfloat tex_vertices[] = {
-        0.0, 0.0,
-        0.0, 1.0,
-        1.0, 0.0,
-        1.0, 1.0,
-    };
+    GLfloat tex_vertices[8];
+    struct mp_rect *src_rect = args ? args->src : NULL;
+    normalize_rect(tex_vertices, src_rect, tex->w, tex->h, 0, 0, 1, -1);
 
     glUseProgram(program->program);
     glActiveTexture(GL_TEXTURE0);
@@ -494,5 +513,6 @@ const struct ui_render_driver ui_render_driver_vita = {
     .texture_init = render_texture_init,
     .texture_uninit = render_texture_uninit,
     .texture_upload = render_texture_upload,
-    .texture_draw = render_texture_draw,
+
+    .draw_texture = render_draw_texture,
 };

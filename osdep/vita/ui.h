@@ -18,6 +18,11 @@ struct ui_texture;
 
 struct ui_context_internal;
 
+struct ui_texture_draw_args {
+    struct mp_rect *src;
+    struct mp_rect *dst;
+};
+
 struct ui_context {
     void *priv_platform;
     void *priv_render;
@@ -50,8 +55,9 @@ struct ui_render_driver {
     void (*texture_uninit)(struct ui_context *ctx, struct ui_texture **tex);
     void (*texture_upload)(struct ui_context *ctx, struct ui_texture *tex,
                            void **data, int *strides, int planes);
-    void (*texture_draw)(struct ui_context *ctx, struct ui_texture *tex,
-                         float x, float y, float sx, float sy);
+
+    void (*draw_texture)(struct ui_context *ctx, struct ui_texture *tex,
+                         struct ui_texture_draw_args *args);
 };
 
 void ui_request_redraw(struct ui_context *ctx);

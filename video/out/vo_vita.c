@@ -1,4 +1,5 @@
 #include "vo.h"
+#include "sub/osd.h"
 #include "osdep/vita/ui.h"
 #include "video/mp_image.h"
 #include "video/img_format.h"
@@ -14,6 +15,8 @@ enum render_act {
 struct init_tex_data {
     int w;
     int h;
+    struct mp_rect src;
+    struct mp_rect dst;
     enum ui_tex_fmt fmt;
     struct ui_context *ctx;
 };
@@ -25,6 +28,8 @@ struct update_tex_data {
 
 struct priv_draw {
     struct ui_texture *video_tex;
+    struct mp_rect video_src_rect;
+    struct mp_rect video_dst_rect;
 };
 
 struct priv_vo {
@@ -96,8 +101,13 @@ static int query_format(struct vo *vo, int format)
 static void do_video_draw(struct ui_context *ctx)
 {
     struct priv_draw *priv = ctx->video_ctx;
-    if (priv && priv->video_tex)
-        ui_render_driver_vita.texture_draw(ctx, priv->video_tex, 0, 0, 1, 1);
+    if (priv && priv->video_tex) {
+        struct ui_texture_draw_args args = {
+            .src = &priv->video_src_rect,
+            .dst = &priv->video_dst_rect,
+        };
+        ui_render_driver_vita.draw_texture(ctx, priv->video_tex, &args);
+    }
 }
 
 static void do_video_uninit(struct ui_context *ctx)
@@ -152,21 +162,36 @@ static void do_render_init_texture(void *p)
     if (priv->video_tex)
         ui_render_driver_vita.texture_uninit(data->ctx, &priv->video_tex);
     ui_render_driver_vita.texture_init(data->ctx, &priv->video_tex, data->fmt, data->w, data->h);
+
+    // save placement
+    priv->video_src_rect = data->src;
+    priv->video_dst_rect = data->dst;
 }
 
 static int reconfig(struct vo *vo, struct mp_image_params *params)
 {
+    // screen size will not change
+    vo->dwidth = VITA_SCREEN_W;
+    vo->dheight = VITA_SCREEN_H;
+
+    // calculate video texture placement
+    struct mp_rect src;
+    struct mp_rect dst;
+    struct mp_osd_res osd;
+    vo_get_src_dst_rects(vo, &src, &dst, &osd);
+
     struct init_tex_data *data = ta_new_ptrtype(NULL, data);
     *data = (struct init_tex_data) {
         .ctx = get_ui_context(vo),
         .w = params->w,
         .h = params->h,
+        .src = src,
+        .dst = dst,
         .fmt = resolve_tex_fmt(params->imgfmt),
     };
     render_act_remove(vo, RENDER_ACT_TEX_UPDATE);
     render_act_post_steal(vo, RENDER_ACT_TEX_INIT, data);
 
-    //TODO adjust video size and position
     return 0;
 }
 
