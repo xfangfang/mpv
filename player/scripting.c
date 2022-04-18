@@ -56,7 +56,9 @@ static const struct mp_scripting *const scripting_backends[] = {
 #if HAVE_JAVASCRIPT
     &mp_scripting_js,
 #endif
+#if !HAVE_VITA
     &mp_scripting_run,
+#endif
     NULL
 };
 

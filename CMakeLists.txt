@@ -194,7 +194,6 @@ list(APPEND mpv_sources
 
     ## osdep
     osdep/io.c
-    osdep/semaphore_osx.c
     osdep/subprocess.c
     osdep/threads.c
     osdep/timer.c
