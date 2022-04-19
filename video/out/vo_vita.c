@@ -17,7 +17,7 @@ struct init_tex_data {
     int h;
     struct mp_rect src;
     struct mp_rect dst;
-    enum ui_tex_fmt fmt;
+    enum ui_texure_fmt fmt;
     struct ui_context *ctx;
 };
 
@@ -81,7 +81,7 @@ static void render_act_remove(struct vo *vo, enum render_act act)
     render_act_do_modify(vo, act, NULL, false);
 }
 
-static enum ui_tex_fmt resolve_tex_fmt(int fmt)
+static enum ui_texure_fmt resolve_tex_fmt(int fmt)
 {
     switch (fmt) {
     case IMGFMT_RGBA:

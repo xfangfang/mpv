@@ -111,10 +111,10 @@ struct ui_texture {
     GLuint ids[MP_MAX_PLANES];
     int w;
     int h;
-    enum ui_tex_fmt fmt;
+    enum ui_texure_fmt fmt;
 };
 
-static const struct gl_tex_impl_spec *get_gl_tex_impl_spec(enum ui_tex_fmt fmt)
+static const struct gl_tex_impl_spec *get_gl_tex_impl_spec(enum ui_texure_fmt fmt)
 {
     switch (fmt) {
     case TEX_FMT_RGBA:
@@ -127,7 +127,7 @@ static const struct gl_tex_impl_spec *get_gl_tex_impl_spec(enum ui_tex_fmt fmt)
     return &tex_spec_unknown;
 }
 
-static struct gl_draw_tex_program *get_gl_draw_tex_program(struct priv_render *priv, enum ui_tex_fmt fmt)
+static struct gl_draw_tex_program *get_gl_draw_tex_program(struct priv_render *priv, enum ui_texure_fmt fmt)
 {
     switch (fmt) {
     case TEX_FMT_RGBA:
@@ -320,7 +320,7 @@ static void render_render_end(struct ui_context *ctx)
 }
 
 static bool render_texture_init(struct ui_context *ctx, struct ui_texture **tex,
-                                enum ui_tex_fmt fmt, int w, int h)
+                                enum ui_texure_fmt fmt, int w, int h)
 {
     struct ui_texture *new_tex = malloc(sizeof(struct ui_texture));
     new_tex->w = w;

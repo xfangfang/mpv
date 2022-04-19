@@ -8,7 +8,7 @@
 #define VITA_SCREEN_W 960
 #define VITA_SCREEN_H 544
 
-enum ui_tex_fmt {
+enum ui_texure_fmt {
     TEX_FMT_UNKNOWN,
     TEX_FMT_RGBA,
     TEX_FMT_YUV420,
@@ -51,7 +51,7 @@ struct ui_render_driver {
     void (*render_end)(struct ui_context *ctx);
 
     bool (*texture_init)(struct ui_context *ctx, struct ui_texture **tex,
-                         enum ui_tex_fmt fmt, int w, int h);
+                         enum ui_texure_fmt fmt, int w, int h);
     void (*texture_uninit)(struct ui_context *ctx, struct ui_texture **tex);
     void (*texture_upload)(struct ui_context *ctx, struct ui_texture *tex,
                            void **data, int *strides, int planes);
