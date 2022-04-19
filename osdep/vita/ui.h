@@ -14,24 +14,38 @@ enum ui_texure_fmt {
     TEX_FMT_YUV420,
 };
 
+struct ui_panel;
 struct ui_texture;
-
-struct ui_context_internal;
+struct ui_context;
 
 struct ui_texture_draw_args {
     struct mp_rect *src;
     struct mp_rect *dst;
 };
 
+struct ui_panel_player_params {
+    char *path;
+};
+
+typedef void (*ui_context_fn)(struct ui_context*);
+
 struct ui_context {
     void *priv_platform;
     void *priv_render;
-    struct ui_context_internal *internal;
+    void *priv_panel;
+    void *priv_context;
     struct mp_dispatch_queue *dispatch;
+    const struct ui_panel *panel;
+};
 
-    void *video_ctx;
-    void (*video_draw_cb)(struct ui_context *ctx);
-    void (*video_uninit_cb)(struct ui_context *ctx);
+struct ui_panel {
+    int priv_size;
+    bool (*init)(struct ui_context *ctx, void *params);
+    void (*uninit)(struct ui_context *ctx);
+    void (*on_show)(struct ui_context *ctx);
+    void (*on_hide)(struct ui_context *ctx);
+    void (*on_draw)(struct ui_context *ctx);
+    void (*on_poll)(struct ui_context *ctx);
 };
 
 struct ui_platform_driver {
@@ -60,8 +74,19 @@ struct ui_render_driver {
                          struct ui_texture_draw_args *args);
 };
 
-void ui_request_redraw(struct ui_context *ctx);
-void ui_request_mpv_shutdown(struct ui_context* ctx);
+void ui_panel_common_wakeup(struct ui_context *ctx);
+void ui_panel_common_invalidate(struct ui_context *ctx);
+void *ui_panel_common_get_priv(struct ui_context *ctx, const struct ui_panel *panel);
+void ui_panel_common_push(struct ui_context *ctx, const struct ui_panel *panel, void *data);
+void ui_panel_common_pop(struct ui_context *ctx);
+void ui_panel_common_pop_all(struct ui_context *ctx);
+
+void *ui_panel_player_get_vo_data(struct ui_context *ctx);
+void ui_panel_player_set_vo_data(struct ui_context *ctx, void *data);
+void ui_panel_player_set_vo_draw_fn(struct ui_context *ctx, ui_context_fn f);
+void ui_panel_player_set_vo_uninit_fn(struct ui_context *ctx, ui_context_fn f);
+
+extern const struct ui_panel ui_panel_player;
 
 extern const struct ui_platform_driver ui_platform_driver_vita;
 extern const struct ui_render_driver ui_render_driver_vita;

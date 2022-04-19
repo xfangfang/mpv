@@ -100,8 +100,11 @@ static int query_format(struct vo *vo, int format)
 
 static void do_video_draw(struct ui_context *ctx)
 {
-    struct priv_draw *priv = ctx->video_ctx;
-    if (priv && priv->video_tex) {
+    struct priv_draw *priv = ui_panel_player_get_vo_data(ctx);
+    if (!priv)
+        return;
+
+    if (priv->video_tex) {
         struct ui_texture_draw_args args = {
             .src = &priv->video_src_rect,
             .dst = &priv->video_dst_rect,
@@ -112,22 +115,21 @@ static void do_video_draw(struct ui_context *ctx)
 
 static void do_video_uninit(struct ui_context *ctx)
 {
-    struct priv_draw *priv = ctx->video_ctx;
-    if (priv && priv->video_tex)
-        ui_render_driver_vita.texture_uninit(ctx, &priv->video_tex);
+    struct priv_draw *priv = ui_panel_player_get_vo_data(ctx);
+    if (!priv)
+        return;
 
-    ctx->video_ctx = NULL;
-    ctx->video_draw_cb = NULL;
-    ctx->video_uninit_cb = NULL;
+    if (priv->video_tex)
+        ui_render_driver_vita.texture_uninit(ctx, &priv->video_tex);
 }
 
 static void do_render_init_draw_ctx(void *p)
 {
     struct ui_context *ctx = p;
     struct priv_draw *priv = talloc_zero_size(ctx, sizeof(*priv));
-    ctx->video_ctx = priv;
-    ctx->video_draw_cb = do_video_draw;
-    ctx->video_uninit_cb = do_video_uninit;
+    ui_panel_player_set_vo_data(ctx, priv);
+    ui_panel_player_set_vo_draw_fn(ctx, do_video_draw);
+    ui_panel_player_set_vo_uninit_fn(ctx, do_video_uninit);
 }
 
 static int preinit(struct vo *vo)
@@ -146,7 +148,7 @@ static void uninit(struct vo *vo)
 
 static void do_render_redraw(void *p)
 {
-    ui_request_redraw(p);
+    ui_panel_common_invalidate(p);
 }
 
 static void flip_page(struct vo *vo)
@@ -158,7 +160,10 @@ static void do_render_init_texture(void *p)
 {
     // reinit video texture
     struct init_tex_data *data = p;
-    struct priv_draw *priv = data->ctx->video_ctx;
+    struct priv_draw *priv = ui_panel_player_get_vo_data(data->ctx);
+    if(!priv)
+        return;
+
     if (priv->video_tex)
         ui_render_driver_vita.texture_uninit(data->ctx, &priv->video_tex);
     ui_render_driver_vita.texture_init(data->ctx, &priv->video_tex, data->fmt, data->w, data->h);
@@ -198,7 +203,10 @@ static int reconfig(struct vo *vo, struct mp_image_params *params)
 static void do_render_update_texture(void *p)
 {
     struct update_tex_data *data = p;
-    struct priv_draw *priv = data->ctx->video_ctx;
+    struct priv_draw *priv = ui_panel_player_get_vo_data(data->ctx);
+    if (!priv)
+        return;
+
     struct mp_image *image = data->image;
     void *planes[MP_MAX_PLANES];
     for (int i = 0; i < MP_MAX_PLANES; ++i)

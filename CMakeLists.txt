@@ -212,6 +212,9 @@ list(APPEND mpv_sources
     osdep/terminal-dummy.c
     osdep/subprocess-dummy.c
     osdep/main-fn-vita.c
+
+    ## Vita UI
+    osdep/vita/ui_panel_player.c
 )
 
 

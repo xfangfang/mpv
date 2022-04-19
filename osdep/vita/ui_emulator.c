@@ -173,7 +173,7 @@ static void get_glfw_centered_window_pos(GLFWwindow *win, int *out_x, int *out_y
 static void on_window_close(GLFWwindow *window)
 {
     void *ctx = glfwGetWindowUserPointer(window);
-    ui_request_mpv_shutdown(ctx);
+    ui_panel_common_pop_all(ctx);
 }
 
 static bool platform_init(struct ui_context *ctx)

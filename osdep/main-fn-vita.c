@@ -2,97 +2,67 @@
 
 #include "libmpv/client.h"
 #include "common/common.h"
+#include "misc/bstr.h"
 #include "osdep/timer.h"
 #include "osdep/vita/ui.h"
 #include "ta/ta_talloc.h"
 
 #define FRAME_INTERVAL_US (1 * 1000 * 1000 / 60)
 
-enum {
-    INTERNAL_FLAG_REDRAW = 1 << 0,
-    INTERNAL_FLAG_MPV_SHUTDOWN = 1 << 1,
+struct ui_panel_item {
+    void *data;
+    const struct ui_panel *panel;
 };
 
 struct ui_context_internal {
-    int flags;
+    bool want_redraw;
     int64_t frame_start;
     pthread_mutex_t lock;
     pthread_cond_t wakeup;
-    mpv_handle *mpv;
+    int panel_count;
+    struct ui_panel_item *panel_stack;
 };
 
 static void wait_next_frame(struct ui_context *ctx)
 {
-    int64_t frame_next = ctx->internal->frame_start + FRAME_INTERVAL_US;
+    struct ui_context_internal *priv = ctx->priv_context;
+    int64_t frame_next = priv->frame_start + FRAME_INTERVAL_US;
     int64_t wait_time = MPMAX(frame_next - mp_time_us(), 0);
     if (wait_time > 0) {
         struct timespec ts = mp_time_us_to_timespec(wait_time);
-        pthread_mutex_lock(&ctx->internal->lock);
-        pthread_cond_timedwait(&ctx->internal->wakeup, &ctx->internal->lock, &ts);
-        pthread_mutex_unlock(&ctx->internal->lock);
+        pthread_mutex_lock(&priv->lock);
+        pthread_cond_timedwait(&priv->wakeup, &priv->lock, &ts);
+        pthread_mutex_unlock(&priv->lock);
     }
 }
 
 static bool advnace_frame_time(struct ui_context *ctx)
 {
-    int frame_count = (mp_time_us() - ctx->internal->frame_start) / FRAME_INTERVAL_US;
+    struct ui_context_internal *priv = ctx->priv_context;
+    int frame_count = (mp_time_us() - priv->frame_start) / FRAME_INTERVAL_US;
     if (frame_count > 0) {
-        ctx->internal->frame_start += frame_count * FRAME_INTERVAL_US;
+        priv->frame_start += frame_count * FRAME_INTERVAL_US;
         return true;
     }
     return false;
 }
 
-static void handle_poll_events(struct ui_context *ctx) {
+static void handle_platform_events(struct ui_context *ctx)
+{
     ui_platform_driver_vita.poll_events(ctx);
-}
-
-static void handle_redraw(struct ui_context *ctx)
-{
-    if (!(ctx->internal->flags & INTERNAL_FLAG_REDRAW))
-        return;
-
-    ctx->internal->flags &= ~INTERNAL_FLAG_REDRAW;
-    ui_render_driver_vita.render_start(ctx);
-    if (ctx->video_draw_cb)
-        ctx->video_draw_cb(ctx);
-    ui_render_driver_vita.render_end(ctx);
-}
-
-static void handle_mpv_events(struct ui_context *ctx)
-{
-    mpv_handle *mpv = ctx->internal->mpv;
-    if (!mpv)
-        return;
-
-    while (true) {
-        mpv_event *event = mpv_wait_event(mpv, 0);
-        if (event->event_id == MPV_EVENT_NONE) {
-            break;
-        } else if (event->event_id == MPV_EVENT_SHUTDOWN) {
-            mpv_terminate_destroy(mpv);
-            ctx->internal->mpv = NULL;
-            ctx->internal->flags |= INTERNAL_FLAG_MPV_SHUTDOWN;
-            break;
-        }
-    }
 }
 
 static void on_dispatch_wakeup(void *p)
 {
-    struct ui_context *ctx = p;
-    pthread_mutex_lock(&ctx->internal->lock);
-    pthread_cond_signal(&ctx->internal->wakeup);
-    pthread_mutex_unlock(&ctx->internal->lock);
+    ui_panel_common_wakeup(p);
 }
 
 static void ui_context_destroy(void *p)
 {
     struct ui_context *ctx = p;
-    pthread_mutex_destroy(&ctx->internal->lock);
-    pthread_cond_destroy(&ctx->internal->wakeup);
-    if (ctx->video_uninit_cb)
-        ctx->video_uninit_cb(ctx);
+    struct ui_context_internal *priv = ctx->priv_context;
+    pthread_mutex_destroy(&priv->lock);
+    pthread_cond_destroy(&priv->wakeup);
     if (ctx->priv_render)
         ui_render_driver_vita.uninit(ctx);
     if (ctx->priv_platform)
@@ -101,46 +71,27 @@ static void ui_context_destroy(void *p)
 
 static struct ui_context *ui_context_new()
 {
-    size_t size_base = sizeof(struct ui_context);
-    size_t size_internal = sizeof(struct ui_context_internal);
-    size_t size_platform = ui_platform_driver_vita.priv_size;
-    size_t size_render = ui_render_driver_vita.priv_size;
-    size_t size_all = size_base + size_internal + size_platform + size_render;
-
-    uint8_t *p = talloc_zero_size(NULL, size_all);
-    struct ui_context *ctx = (void*) p;
+    struct ui_context *ctx = talloc_zero_size(NULL, sizeof(struct ui_context));
     talloc_set_destructor(ctx, ui_context_destroy);
     ctx->dispatch = mp_dispatch_create(ctx);
     mp_dispatch_set_wakeup_fn(ctx->dispatch, on_dispatch_wakeup, ctx);
-    p += size_base;
 
-    ctx->internal = (void*) p;
-    pthread_mutex_init(&ctx->internal->lock, NULL);
-    pthread_cond_init(&ctx->internal->wakeup, NULL);
-    p += size_internal;
+    struct ui_context_internal *priv = talloc_zero_size(ctx, sizeof(struct ui_context_internal));
+    ctx->priv_context = priv;
+    pthread_mutex_init(&priv->lock, NULL);
+    pthread_cond_init(&priv->wakeup, NULL);
 
-    ctx->priv_platform = (void*) p;
+    ctx->priv_platform = talloc_zero_size(ctx, ui_platform_driver_vita.priv_size);
     if (!ui_platform_driver_vita.init(ctx)) {
         ctx->priv_platform = NULL;
         goto error;
     }
-    p += size_platform;
 
-    ctx->priv_render = (void*) p;
+    ctx->priv_render = talloc_zero_size(ctx, ui_render_driver_vita.priv_size);
     if (!ui_render_driver_vita.init(ctx)) {
         ctx->priv_render = NULL;
         goto error;
     }
-
-    ctx->internal->mpv = mpv_create();
-    if (!ctx->internal->mpv)
-        goto error;
-
-    mpv_set_option(ctx->internal->mpv, "wid", MPV_FORMAT_INT64, &ctx);
-    mpv_set_option_string(ctx->internal->mpv, "idle", "yes");
-    mpv_set_wakeup_callback(ctx->internal->mpv, on_dispatch_wakeup, ctx);
-    if (mpv_initialize(ctx->internal->mpv) != 0)
-        goto error;
 
     return ctx;
 
@@ -149,25 +100,108 @@ error:
     return NULL;
 }
 
+static void handle_panel_events(struct ui_context *ctx)
+{
+    if (ctx->panel)
+        ctx->panel->on_poll(ctx);
+}
+
+static bool has_panel(struct ui_context *ctx, const struct ui_panel *panel)
+{
+    if (ctx->panel == panel)
+        return true;
+
+    struct ui_context_internal *priv = ctx->priv_context;
+    for (int i = 0; i < priv->panel_count; ++i)
+        if (priv->panel_stack[i].panel == panel)
+            return true;
+    return false;
+}
+
+static void do_push_panel(struct ui_context *ctx, const struct ui_panel *panel, void *data)
+{
+    // ignore duplicated panel
+    if (has_panel(ctx, panel))
+        return;
+
+    // hide current panel
+    if (ctx->panel) {
+        struct ui_context_internal *priv = ctx->priv_context;
+        struct ui_panel_item save_item = {
+            .data = ctx->priv_panel,
+            .panel = ctx->panel
+        };
+        MP_TARRAY_APPEND(ctx, priv->panel_stack, priv->panel_count, save_item);
+        if (ctx->panel->on_hide)
+            ctx->panel->on_hide(ctx);
+    }
+
+    // show new panel
+    ctx->panel = panel;
+    ctx->priv_panel = talloc_zero_size(ctx, panel->priv_size);
+    ctx->panel->init(ctx, data);
+    if (ctx->panel->on_show)
+        ctx->panel->on_show(ctx);
+}
+
+static void do_pop_panel(struct ui_context *ctx)
+{
+    if (!ctx->panel)
+        return;
+
+    ctx->panel->uninit(ctx);
+    ctx->panel = NULL;
+    TA_FREEP(&ctx->priv_panel);
+
+    struct ui_panel_item *item = NULL;
+    struct ui_context_internal *priv = ctx->priv_context;
+    MP_TARRAY_POP(priv->panel_stack, priv->panel_count, item);
+    if (item) {
+        ctx->priv_panel = item->data;
+        ctx->panel = item->panel;
+        ctx->panel->on_show(ctx);
+    }
+}
+
+static void handle_redraw(struct ui_context *ctx)
+{
+    struct ui_context_internal *priv = ctx->priv_context;
+    if (!priv->want_redraw)
+        return;
+
+    priv->want_redraw = false;
+    ui_render_driver_vita.render_start(ctx);
+    if (ctx->panel)
+        ctx->panel->on_draw(ctx);
+    ui_render_driver_vita.render_end(ctx);
+}
+
+static void* new_player_params(void *parent, const char *path)
+{
+    struct ui_panel_player_params *p = talloc_ptrtype(parent, p);
+    *p = (struct ui_panel_player_params) {
+        .path = talloc_strdup(p, path),
+    };
+    return p;
+}
+
 static void main_loop(struct ui_context *ctx)
 {
     if (!ctx)
         return;
 
-    const char *args[] = {"loadfile", "/tmp/test.mp4", NULL};
-    mpv_command(ctx->internal->mpv, args);
-
+    ui_panel_common_push(ctx, &ui_panel_player, new_player_params(ctx, "/tmp/test.mp4"));
     while (true) {
         // poll and run pending async jobs
-        handle_mpv_events(ctx);
+        handle_panel_events(ctx);
         mp_dispatch_queue_process(ctx->dispatch, 0);
 
         if (advnace_frame_time(ctx)) {
-            handle_poll_events(ctx);
+            handle_platform_events(ctx);
             handle_redraw(ctx);
         }
 
-        if (ctx->internal->flags & INTERNAL_FLAG_MPV_SHUTDOWN)
+        if (!ctx->panel)
             break;
 
         // sleep until next frame or interrupt to avoid CPU stress
@@ -183,13 +217,41 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-void ui_request_redraw(struct ui_context *ctx)
+void *ui_panel_common_get_priv(struct ui_context *ctx, const struct ui_panel *panel)
 {
-    ctx->internal->flags |= INTERNAL_FLAG_REDRAW;
+    return (ctx && ctx->panel == panel) ? ctx->priv_panel : NULL;
 }
 
-void ui_request_mpv_shutdown(struct ui_context *ctx)
+void ui_panel_common_wakeup(struct ui_context *ctx)
 {
-    const char *args[] = {"quit", NULL};
-    mpv_command_async(ctx->internal->mpv, 0, args);
+    struct ui_context_internal *priv = ctx->priv_context;
+    pthread_mutex_lock(&priv->lock);
+    pthread_cond_signal(&priv->wakeup);
+    pthread_mutex_unlock(&priv->lock);
+}
+
+void ui_panel_common_invalidate(struct ui_context *ctx)
+{
+    struct ui_context_internal *priv = ctx->priv_context;
+    priv->want_redraw = true;
+}
+
+void ui_panel_common_push(struct ui_context *ctx, const struct ui_panel *panel, void *data)
+{
+    ui_panel_common_invalidate(ctx);
+    do_push_panel(ctx, panel, data);
+    ta_free(data);
+}
+
+void ui_panel_common_pop(struct ui_context *ctx)
+{
+    ui_panel_common_invalidate(ctx);
+    do_pop_panel(ctx);
+}
+
+void ui_panel_common_pop_all(struct ui_context *ctx)
+{
+    ui_panel_common_invalidate(ctx);
+    while (ctx->panel)
+        do_pop_panel(ctx);
 }
