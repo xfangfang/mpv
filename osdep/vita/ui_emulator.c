@@ -9,6 +9,26 @@
 extern const struct ao_driver audio_out_alsa;
 struct ao_driver audio_out_vita;
 
+struct key_map_item {
+    int glfw_key_code;
+    enum ui_key_code ui_key_code;
+};
+
+static const struct key_map_item platform_key_map[] = {
+    { GLFW_KEY_S, UI_KEY_CODE_VITA_DPAD_LEFT },
+    { GLFW_KEY_F, UI_KEY_CODE_VITA_DPAD_RIGHT },
+    { GLFW_KEY_E, UI_KEY_CODE_VITA_DPAD_UP },
+    { GLFW_KEY_D, UI_KEY_CODE_VITA_DPAD_DOWN },
+    { GLFW_KEY_J, UI_KEY_CODE_VITA_ACTION_SQUARE },
+    { GLFW_KEY_L, UI_KEY_CODE_VITA_ACTION_CIRCLE },
+    { GLFW_KEY_I, UI_KEY_CODE_VITA_ACTION_TRIANGLE },
+    { GLFW_KEY_K, UI_KEY_CODE_VITA_ACTION_CROSS },
+    { GLFW_KEY_W, UI_KEY_CODE_VITA_L1 },
+    { GLFW_KEY_O, UI_KEY_CODE_VITA_R1 },
+    { GLFW_KEY_N, UI_KEY_CODE_VITA_START },
+    { GLFW_KEY_M, UI_KEY_CODE_VITA_SELECT },
+};
+
 struct gl_attr_spec {
     const char *name;
     int pos;
@@ -221,6 +241,19 @@ static void platform_uninit(struct ui_context *ctx)
 static void platform_poll_events(struct ui_context *ctx)
 {
     glfwPollEvents();
+}
+
+static uint32_t platform_poll_keys(struct ui_context *ctx)
+{
+    uint32_t bits = 0;
+    struct priv_platform *priv = get_priv_platform(ctx);
+    for (int i = 0; i < MP_ARRAY_SIZE(platform_key_map); ++i) {
+        const struct key_map_item *item = &platform_key_map[i];
+        int state = glfwGetKey(priv->window, item->glfw_key_code);
+        if (state == GLFW_PRESS)
+            bits |= (1 << item->ui_key_code);
+    }
+    return bits;
 }
 
 static void delete_program(struct gl_draw_tex_program *program)
@@ -499,6 +532,7 @@ const struct ui_platform_driver ui_platform_driver_vita = {
     .init = platform_init,
     .uninit = platform_uninit,
     .poll_events = platform_poll_events,
+    .poll_keys = platform_poll_keys,
 };
 
 const struct ui_render_driver ui_render_driver_vita = {

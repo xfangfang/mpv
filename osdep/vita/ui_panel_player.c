@@ -5,8 +5,7 @@
 struct priv_panel {
     mpv_handle *mpv;
     void *vo_data;
-    ui_context_fn vo_draw_fn;
-    ui_context_fn vo_uninit_fn;
+    struct ui_panel_player_vo_fns vo_fns;
 };
 
 void *ui_panel_player_get_vo_data(struct ui_context *ctx)
@@ -22,18 +21,11 @@ void ui_panel_player_set_vo_data(struct ui_context *ctx, void *data)
         priv->vo_data = ta_steal(priv, data);
 }
 
-void ui_panel_player_set_vo_draw_fn(struct ui_context *ctx, ui_context_fn f)
+void ui_panel_player_set_vo_fns(struct ui_context *ctx, const struct ui_panel_player_vo_fns *fns)
 {
     struct priv_panel *priv = ui_panel_common_get_priv(ctx, &ui_panel_player);
     if (priv)
-        priv->vo_draw_fn = f;
-}
-
-void ui_panel_player_set_vo_uninit_fn(struct ui_context *ctx, ui_context_fn f)
-{
-    struct priv_panel *priv = ui_panel_common_get_priv(ctx, &ui_panel_player);
-    if (priv)
-        priv->vo_uninit_fn = f;
+        priv->vo_fns = *fns;
 }
 
 static void on_mpv_wakeup(void *p)
@@ -50,11 +42,12 @@ static bool player_init(struct ui_context *ctx, void *p)
 
     mpv_set_option(priv->mpv, "wid", MPV_FORMAT_INT64, &ctx);
     mpv_set_option_string(priv->mpv, "idle", "yes");
+    mpv_set_option_string(priv->mpv, "keep-open", "yes");
     mpv_set_wakeup_callback(priv->mpv, on_mpv_wakeup, ctx);
     if (mpv_initialize(priv->mpv) != 0)
         return false;
 
-    struct ui_panel_player_params *params = p;
+    struct ui_panel_player_init_params *params = p;
     if (params) {
         const char *args[] = {"loadfile", params->path, NULL};
         mpv_command(priv->mpv, args);
@@ -65,8 +58,8 @@ static bool player_init(struct ui_context *ctx, void *p)
 static void player_uninit(struct ui_context *ctx)
 {
     struct priv_panel *priv = ctx->priv_panel;
-    if (priv->vo_uninit_fn)
-        priv->vo_uninit_fn(ctx);
+    if (priv->vo_fns.uninit)
+        priv->vo_fns.uninit(ctx);
     if (priv->mpv)
         mpv_destroy(priv->mpv);
 }
@@ -74,8 +67,8 @@ static void player_uninit(struct ui_context *ctx)
 static void player_on_draw(struct ui_context *ctx)
 {
     struct priv_panel *priv = ctx->priv_panel;
-    if (priv->vo_draw_fn)
-        priv->vo_draw_fn(ctx);
+    if (priv->vo_fns.draw)
+        priv->vo_fns.draw(ctx);
 }
 
 static void player_on_poll(struct ui_context *ctx)
@@ -97,6 +90,13 @@ static void player_on_poll(struct ui_context *ctx)
     }
 }
 
+static void player_on_key(struct ui_context *ctx, enum ui_key_code code, enum ui_key_state state)
+{
+    struct priv_panel *priv = ctx->priv_panel;
+    if (priv->vo_fns.send_key)
+        priv->vo_fns.send_key(ctx, code, state);
+}
+
 const struct ui_panel ui_panel_player = {
     .priv_size = sizeof(struct priv_panel),
     .init = player_init,
@@ -105,4 +105,5 @@ const struct ui_panel ui_panel_player = {
     .on_hide = NULL,
     .on_draw = player_on_draw,
     .on_poll = player_on_poll,
+    .on_key = player_on_key,
 };

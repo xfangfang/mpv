@@ -15,12 +15,15 @@ struct ui_panel_item {
 };
 
 struct ui_context_internal {
-    bool want_redraw;
-    int64_t frame_start;
     pthread_mutex_t lock;
     pthread_cond_t wakeup;
+
     int panel_count;
     struct ui_panel_item *panel_stack;
+
+    bool want_redraw;
+    int64_t frame_start;
+    uint32_t key_bits;
 };
 
 static void wait_next_frame(struct ui_context *ctx)
@@ -45,6 +48,27 @@ static bool advnace_frame_time(struct ui_context *ctx)
         return true;
     }
     return false;
+}
+
+static void handle_platform_keys(struct ui_context *ctx)
+{
+    struct ui_context_internal *priv = ctx->priv_context;
+    uint32_t new_bits = ui_platform_driver_vita.poll_keys(ctx);
+    uint32_t changed_mask = new_bits ^ priv->key_bits;
+    if (!changed_mask)
+        return;
+
+    for (int i = 0; i < UI_KEY_CODE_VITA_END; ++i) {
+        uint32_t key_bit = 1 << i;
+        if (key_bit & changed_mask) {
+            bool pressed = key_bit & new_bits;
+            enum ui_key_state state = pressed ? UI_KEY_STATE_DOWN : UI_KEY_STATE_UP;
+            if (ctx->panel)
+                ctx->panel->on_key(ctx, i, state);
+        }
+    }
+
+    priv->key_bits = new_bits;
 }
 
 static void handle_platform_events(struct ui_context *ctx)
@@ -178,8 +202,8 @@ static void handle_redraw(struct ui_context *ctx)
 
 static void* new_player_params(void *parent, const char *path)
 {
-    struct ui_panel_player_params *p = talloc_ptrtype(parent, p);
-    *p = (struct ui_panel_player_params) {
+    struct ui_panel_player_init_params *p = talloc_ptrtype(parent, p);
+    *p = (struct ui_panel_player_init_params) {
         .path = talloc_strdup(p, path),
     };
     return p;
@@ -197,6 +221,7 @@ static void main_loop(struct ui_context *ctx)
         mp_dispatch_queue_process(ctx->dispatch, 0);
 
         if (advnace_frame_time(ctx)) {
+            handle_platform_keys(ctx);
             handle_platform_events(ctx);
             handle_redraw(ctx);
         }

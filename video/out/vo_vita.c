@@ -1,8 +1,12 @@
 #include "vo.h"
 #include "sub/osd.h"
+#include "input/input.h"
+#include "input/keycodes.h"
 #include "osdep/vita/ui.h"
 #include "video/mp_image.h"
 #include "video/img_format.h"
+
+#define INVALID_KEY_CODE (-1)
 
 enum render_act {
     RENDER_ACT_INIT,
@@ -10,6 +14,11 @@ enum render_act {
     RENDER_ACT_TEX_INIT,
     RENDER_ACT_TEX_UPDATE,
     RENDER_ACT_MAX,
+};
+
+struct init_vo_data {
+    struct ui_context *ctx;
+    struct input_ctx *input;
 };
 
 struct init_tex_data {
@@ -26,7 +35,8 @@ struct update_tex_data {
     struct mp_image *image;
 };
 
-struct priv_draw {
+struct priv_panel {
+    struct input_ctx *input_ctx;
     struct ui_texture *video_tex;
     struct mp_rect video_src_rect;
     struct mp_rect video_dst_rect;
@@ -98,9 +108,9 @@ static int query_format(struct vo *vo, int format)
     return resolve_tex_fmt(format) != TEX_FMT_UNKNOWN;
 }
 
-static void do_video_draw(struct ui_context *ctx)
+static void do_panel_draw(struct ui_context *ctx)
 {
-    struct priv_draw *priv = ui_panel_player_get_vo_data(ctx);
+    struct priv_panel *priv = ui_panel_player_get_vo_data(ctx);
     if (!priv)
         return;
 
@@ -113,9 +123,9 @@ static void do_video_draw(struct ui_context *ctx)
     }
 }
 
-static void do_video_uninit(struct ui_context *ctx)
+static void do_panel_uninit(struct ui_context *ctx)
 {
-    struct priv_draw *priv = ui_panel_player_get_vo_data(ctx);
+    struct priv_panel *priv = ui_panel_player_get_vo_data(ctx);
     if (!priv)
         return;
 
@@ -123,20 +133,93 @@ static void do_video_uninit(struct ui_context *ctx)
         ui_render_driver_vita.texture_uninit(ctx, &priv->video_tex);
 }
 
-static void do_render_init_draw_ctx(void *p)
+static int resolve_mp_key_code(enum ui_key_code key)
 {
-    struct ui_context *ctx = p;
-    struct priv_draw *priv = talloc_zero_size(ctx, sizeof(*priv));
+    switch (key) {
+    case UI_KEY_CODE_VITA_DPAD_LEFT:
+        return MP_KEY_GAMEPAD_DPAD_LEFT;
+    case UI_KEY_CODE_VITA_DPAD_RIGHT:
+        return MP_KEY_GAMEPAD_DPAD_RIGHT;
+    case UI_KEY_CODE_VITA_DPAD_UP:
+        return MP_KEY_GAMEPAD_DPAD_UP;
+    case UI_KEY_CODE_VITA_DPAD_DOWN:
+        return MP_KEY_GAMEPAD_DPAD_DOWN;
+    case UI_KEY_CODE_VITA_ACTION_SQUARE:
+        return MP_KEY_GAMEPAD_ACTION_LEFT;
+    case UI_KEY_CODE_VITA_ACTION_CIRCLE:
+        return MP_KEY_GAMEPAD_ACTION_RIGHT;
+    case UI_KEY_CODE_VITA_ACTION_TRIANGLE:
+        return MP_KEY_GAMEPAD_ACTION_UP;
+    case UI_KEY_CODE_VITA_ACTION_CROSS:
+        return MP_KEY_GAMEPAD_ACTION_DOWN;
+    case UI_KEY_CODE_VITA_L1:
+        return MP_KEY_GAMEPAD_LEFT_SHOULDER;
+    case UI_KEY_CODE_VITA_R1:
+        return MP_KEY_GAMEPAD_RIGHT_SHOULDER;
+    case UI_KEY_CODE_VITA_START:
+        return MP_KEY_GAMEPAD_START;
+    case UI_KEY_CODE_VITA_SELECT:
+        return MP_KEY_GAMEPAD_MENU;
+    case UI_KEY_CODE_VITA_END:
+        break;
+    }
+    return INVALID_KEY_CODE;
+}
+
+static int resolve_mp_key_state(enum ui_key_state state)
+{
+    switch (state) {
+    case UI_KEY_STATE_DOWN:
+        return MP_KEY_STATE_DOWN;
+    case UI_KEY_STATE_UP:
+        return MP_KEY_STATE_UP;
+    }
+    return 0;
+}
+
+static void do_panel_send_key(struct ui_context *ctx, enum ui_key_code key, enum ui_key_state state)
+{
+    struct priv_panel *priv = ui_panel_player_get_vo_data(ctx);
+    if (!priv)
+        return;
+
+    int code_bits = resolve_mp_key_code(key);
+    if (code_bits == INVALID_KEY_CODE)
+        return;
+
+    // input_ctx is thread-safed, it should be fine to use it duraing its lifetime
+    // if mpv or vo is destroying, main thread will be blocked, this function will not be called anymore
+    int state_bits = resolve_mp_key_state(state);
+    mp_input_put_key(priv->input_ctx, (code_bits | state_bits));
+}
+
+static void do_render_init_vo_driver(void *p)
+{
+    struct init_vo_data *data = p;
+    struct ui_context *ctx = data->ctx;
+    struct priv_panel *priv = talloc_zero_size(ctx, sizeof(*priv));
+    priv->input_ctx = data->input;
     ui_panel_player_set_vo_data(ctx, priv);
-    ui_panel_player_set_vo_draw_fn(ctx, do_video_draw);
-    ui_panel_player_set_vo_uninit_fn(ctx, do_video_uninit);
+
+    struct ui_panel_player_vo_fns fns = {
+        .draw = do_panel_draw,
+        .uninit = do_panel_uninit,
+        .send_key = do_panel_send_key,
+    };
+    ui_panel_player_set_vo_fns(ctx, &fns);
 }
 
 static int preinit(struct vo *vo)
 {
     struct priv_vo *priv = vo->priv;
     memset(priv->cb_data_slots, 0, sizeof(priv->cb_data_slots));
-    render_act_post_ref(vo, RENDER_ACT_INIT, get_ui_context(vo));
+
+    struct init_vo_data *data = ta_new_ptrtype(priv, data);
+    *data = (struct init_vo_data) {
+        .ctx = get_ui_context(vo),
+        .input = vo->input_ctx,
+    };
+    render_act_post_ref(vo, RENDER_ACT_INIT, data);
     return 0;
 }
 
@@ -160,7 +243,7 @@ static void do_render_init_texture(void *p)
 {
     // reinit video texture
     struct init_tex_data *data = p;
-    struct priv_draw *priv = ui_panel_player_get_vo_data(data->ctx);
+    struct priv_panel *priv = ui_panel_player_get_vo_data(data->ctx);
     if(!priv)
         return;
 
@@ -185,7 +268,7 @@ static int reconfig(struct vo *vo, struct mp_image_params *params)
     struct mp_osd_res osd;
     vo_get_src_dst_rects(vo, &src, &dst, &osd);
 
-    struct init_tex_data *data = ta_new_ptrtype(NULL, data);
+    struct init_tex_data *data = ta_new_ptrtype(vo->priv, data);
     *data = (struct init_tex_data) {
         .ctx = get_ui_context(vo),
         .w = params->w,
@@ -203,7 +286,7 @@ static int reconfig(struct vo *vo, struct mp_image_params *params)
 static void do_render_update_texture(void *p)
 {
     struct update_tex_data *data = p;
-    struct priv_draw *priv = ui_panel_player_get_vo_data(data->ctx);
+    struct priv_panel *priv = ui_panel_player_get_vo_data(data->ctx);
     if (!priv)
         return;
 
@@ -217,7 +300,7 @@ static void do_render_update_texture(void *p)
 static void draw_frame(struct vo *vo, struct vo_frame *frame)
 {
     struct mp_image *image = mp_image_new_ref(frame->current);
-    struct update_tex_data *data = ta_new_ptrtype(NULL, data);
+    struct update_tex_data *data = ta_new_ptrtype(vo->priv, data);
     *data = (struct update_tex_data) {
         .ctx = get_ui_context(vo),
         .image = ta_steal(data, image),
@@ -234,7 +317,7 @@ static mp_dispatch_fn get_render_act_fn(enum render_act act)
 {
     switch (act) {
     case RENDER_ACT_INIT:
-        return do_render_init_draw_ctx;
+        return do_render_init_vo_driver;
     case RENDER_ACT_REDRAW:
         return do_render_redraw;
     case RENDER_ACT_TEX_INIT:

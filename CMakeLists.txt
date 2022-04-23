@@ -15,11 +15,20 @@ set(mpv_gen_dir ${CMAKE_CURRENT_BINARY_DIR}/generated_files)
 
 include(FindPkgConfig)
 
-function(_generate_source _out_var _abs_out_path _script_path)
-    set(_abs_script_path ${CMAKE_CURRENT_SOURCE_DIR}/${_script_path})
+function(_generate_source _out_var _abs_out_path _abs_script_path)
+    # accumulate file paths from script arguments
+    set(_dep_file_paths)
+    list(APPEND _dep_file_paths ${_abs_script_path})
+    foreach(_arg IN LISTS ARGN)
+        set(_abs_arg_path ${_cwd}/${_arg})
+        if (EXISTS ${_abs_arg_path})
+            list(APPEND _dep_file_paths ${_abs_arg_path})
+        endif()
+    endforeach()
+
     get_filename_component(_abs_out_dir ${_abs_out_path} DIRECTORY)
     add_custom_command(OUTPUT ${_abs_out_path}
-        DEPENDS ${_abs_script_path}
+        DEPENDS ${_dep_file_paths}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${_abs_out_dir}
         COMMAND ${_abs_script_path} ${ARGN} ${_abs_out_path})
 
@@ -219,12 +228,17 @@ list(APPEND mpv_sources
 
 
 # generate file
+_generate_source(mpv_gen_files ${mpv_gen_dir}/generated/etc/input.conf.inc
+    ${CMAKE_CURRENT_SOURCE_DIR}/TOOLS/file2string.py
+    ${CMAKE_CURRENT_SOURCE_DIR}/etc/vita/input.conf)
 _generate_source(mpv_gen_files ${mpv_gen_dir}/generated/version.h
-    version.py)
+    ${CMAKE_CURRENT_SOURCE_DIR}/version.py)
 _generate_source(mpv_gen_files ${mpv_gen_dir}/generated/ebml_defs.inc
-    TOOLS/matroska.py --generate-definitions)
+    ${CMAKE_CURRENT_SOURCE_DIR}/TOOLS/matroska.py
+    --generate-definitions)
 _generate_source(mpv_gen_files ${mpv_gen_dir}/generated/ebml_types.h
-    TOOLS/matroska.py --generate-header)
+    ${CMAKE_CURRENT_SOURCE_DIR}/TOOLS/matroska.py
+    --generate-header)
 
 # ffmpeg depedencies
 if (EXISTS ${MPV_FFMPEG_LIBS_DIR})
