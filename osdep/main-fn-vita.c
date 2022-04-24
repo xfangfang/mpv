@@ -18,6 +18,7 @@ struct ui_panel_item {
 };
 
 struct ui_context_internal {
+    bool need_wakeup;
     pthread_mutex_t lock;
     pthread_cond_t wakeup;
 
@@ -30,17 +31,26 @@ struct ui_context_internal {
     uint32_t key_bits;
 };
 
+static void do_wait_next_frame(struct ui_context_internal *priv)
+{
+    // handle pending wakeup request
+    if (priv->need_wakeup)
+        return;
+
+    int64_t frame_next = priv->frame_start + FRAME_INTERVAL_US;
+    int64_t wait_time = MPMAX(frame_next - mp_time_us(), 0);
+    struct timespec ts = mp_time_us_to_timespec(wait_time);
+    pthread_cond_timedwait(&priv->wakeup, &priv->lock, &ts);
+}
+
+
 static void wait_next_frame(struct ui_context *ctx)
 {
     struct ui_context_internal *priv = ctx->priv_context;
-    int64_t frame_next = priv->frame_start + FRAME_INTERVAL_US;
-    int64_t wait_time = MPMAX(frame_next - mp_time_us(), 0);
-    if (wait_time > 0) {
-        struct timespec ts = mp_time_us_to_timespec(wait_time);
-        pthread_mutex_lock(&priv->lock);
-        pthread_cond_timedwait(&priv->wakeup, &priv->lock, &ts);
-        pthread_mutex_unlock(&priv->lock);
-    }
+    pthread_mutex_lock(&priv->lock);
+    do_wait_next_frame(priv);
+    priv->need_wakeup = false;
+    pthread_mutex_unlock(&priv->lock);
 }
 
 static bool advnace_frame_time(struct ui_context *ctx)
@@ -266,7 +276,10 @@ void ui_panel_common_wakeup(struct ui_context *ctx)
 {
     struct ui_context_internal *priv = ctx->priv_context;
     pthread_mutex_lock(&priv->lock);
-    pthread_cond_signal(&priv->wakeup);
+    if (!priv->need_wakeup) {
+        priv->need_wakeup = true;
+        pthread_cond_signal(&priv->wakeup);
+    }
     pthread_mutex_unlock(&priv->lock);
 }
 
