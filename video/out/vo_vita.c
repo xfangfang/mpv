@@ -2,7 +2,10 @@
 #include "sub/osd.h"
 #include "input/input.h"
 #include "input/keycodes.h"
-#include "osdep/vita/ui.h"
+#include "osdep/vita/ui_context.h"
+#include "osdep/vita/ui_device.h"
+#include "osdep/vita/ui_driver.h"
+#include "osdep/vita/ui_panel.h"
 #include "video/mp_image.h"
 #include "video/img_format.h"
 

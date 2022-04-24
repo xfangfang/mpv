@@ -4,7 +4,10 @@
 #include "common/common.h"
 #include "misc/bstr.h"
 #include "osdep/timer.h"
-#include "osdep/vita/ui.h"
+#include "osdep/vita/ui_context.h"
+#include "osdep/vita/ui_device.h"
+#include "osdep/vita/ui_driver.h"
+#include "osdep/vita/ui_panel.h"
 #include "ta/ta_talloc.h"
 
 #define FRAME_INTERVAL_US (1 * 1000 * 1000 / 60)
@@ -20,6 +23,7 @@ struct ui_context_internal {
 
     int panel_count;
     struct ui_panel_item *panel_stack;
+    const struct ui_panel *top_panel;
 
     bool want_redraw;
     int64_t frame_start;
@@ -50,6 +54,12 @@ static bool advnace_frame_time(struct ui_context *ctx)
     return false;
 }
 
+static const struct ui_panel *get_top_panel(struct ui_context *ctx)
+{
+    struct ui_context_internal *priv = ctx->priv_context;
+    return priv->top_panel;
+}
+
 static void handle_platform_keys(struct ui_context *ctx)
 {
     struct ui_context_internal *priv = ctx->priv_context;
@@ -63,8 +73,9 @@ static void handle_platform_keys(struct ui_context *ctx)
         if (key_bit & changed_mask) {
             bool pressed = key_bit & new_bits;
             enum ui_key_state state = pressed ? UI_KEY_STATE_DOWN : UI_KEY_STATE_UP;
-            if (ctx->panel)
-                ctx->panel->on_key(ctx, i, state);
+            const struct ui_panel *panel = get_top_panel(ctx);
+            if (panel)
+                panel->on_key(ctx, i, state);
         }
     }
 
@@ -126,13 +137,14 @@ error:
 
 static void handle_panel_events(struct ui_context *ctx)
 {
-    if (ctx->panel)
-        ctx->panel->on_poll(ctx);
+    const struct ui_panel *panel = get_top_panel(ctx);
+    if (panel)
+        panel->on_poll(ctx);
 }
 
 static bool has_panel(struct ui_context *ctx, const struct ui_panel *panel)
 {
-    if (ctx->panel == panel)
+    if (get_top_panel(ctx) == panel)
         return true;
 
     struct ui_context_internal *priv = ctx->priv_context;
@@ -149,41 +161,42 @@ static void do_push_panel(struct ui_context *ctx, const struct ui_panel *panel, 
         return;
 
     // hide current panel
-    if (ctx->panel) {
-        struct ui_context_internal *priv = ctx->priv_context;
+    struct ui_context_internal *priv = ctx->priv_context;
+    if (priv->top_panel) {
         struct ui_panel_item save_item = {
             .data = ctx->priv_panel,
-            .panel = ctx->panel
+            .panel = priv->top_panel,
         };
         MP_TARRAY_APPEND(ctx, priv->panel_stack, priv->panel_count, save_item);
-        if (ctx->panel->on_hide)
-            ctx->panel->on_hide(ctx);
+        if (priv->top_panel->on_hide)
+            priv->top_panel->on_hide(ctx);
     }
 
     // show new panel
-    ctx->panel = panel;
+    priv->top_panel = panel;
     ctx->priv_panel = talloc_zero_size(ctx, panel->priv_size);
-    ctx->panel->init(ctx, data);
-    if (ctx->panel->on_show)
-        ctx->panel->on_show(ctx);
+    priv->top_panel->init(ctx, data);
+    if (priv->top_panel->on_show)
+        priv->top_panel->on_show(ctx);
 }
 
 static void do_pop_panel(struct ui_context *ctx)
 {
-    if (!ctx->panel)
+    struct ui_context_internal *priv = ctx->priv_context;
+    if (!priv->top_panel)
         return;
 
-    ctx->panel->uninit(ctx);
-    ctx->panel = NULL;
+    priv->top_panel->uninit(ctx);
+    priv->top_panel = NULL;
     TA_FREEP(&ctx->priv_panel);
 
     struct ui_panel_item *item = NULL;
-    struct ui_context_internal *priv = ctx->priv_context;
     MP_TARRAY_POP(priv->panel_stack, priv->panel_count, item);
     if (item) {
         ctx->priv_panel = item->data;
-        ctx->panel = item->panel;
-        ctx->panel->on_show(ctx);
+        priv->top_panel = item->panel;
+        if (priv->top_panel->on_show)
+            priv->top_panel->on_show(ctx);
     }
 }
 
@@ -195,8 +208,9 @@ static void handle_redraw(struct ui_context *ctx)
 
     priv->want_redraw = false;
     ui_render_driver_vita.render_start(ctx);
-    if (ctx->panel)
-        ctx->panel->on_draw(ctx);
+    const struct ui_panel *panel = get_top_panel(ctx);
+    if (panel)
+        panel->on_draw(ctx);
     ui_render_driver_vita.render_end(ctx);
 }
 
@@ -226,7 +240,7 @@ static void main_loop(struct ui_context *ctx)
             handle_redraw(ctx);
         }
 
-        if (!ctx->panel)
+        if (!get_top_panel(ctx))
             break;
 
         // sleep until next frame or interrupt to avoid CPU stress
@@ -244,7 +258,8 @@ int main(int argc, char *argv[])
 
 void *ui_panel_common_get_priv(struct ui_context *ctx, const struct ui_panel *panel)
 {
-    return (ctx && ctx->panel == panel) ? ctx->priv_panel : NULL;
+    const struct ui_panel *top = get_top_panel(ctx);
+    return (top && top == panel) ? ctx->priv_panel : NULL;
 }
 
 void ui_panel_common_wakeup(struct ui_context *ctx)
@@ -277,6 +292,6 @@ void ui_panel_common_pop(struct ui_context *ctx)
 void ui_panel_common_pop_all(struct ui_context *ctx)
 {
     ui_panel_common_invalidate(ctx);
-    while (ctx->panel)
+    while (get_top_panel(ctx))
         do_pop_panel(ctx);
 }

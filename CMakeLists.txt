@@ -290,7 +290,8 @@ if (MPV_BUILD_EMULATOR)
     pkg_check_modules(_pkg_glfw REQUIRED glfw3)
 
     list(APPEND mpv_sources
-        osdep/vita/ui_emulator.c
+        osdep/vita/emulator_render.c
+        osdep/vita/emulator_platform.c
         audio/out/ao_alsa.c)
 
     list(APPEND mpv_include_dirs

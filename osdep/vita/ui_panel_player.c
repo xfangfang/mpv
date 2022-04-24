@@ -1,4 +1,6 @@
-#include "ui.h"
+#include "ui_context.h"
+#include "ui_device.h"
+#include "ui_panel.h"
 #include "ta/ta_talloc.h"
 #include "libmpv/client.h"
 
