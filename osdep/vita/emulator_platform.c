@@ -125,6 +125,7 @@ const struct ui_platform_driver ui_platform_driver_vita = {
     .priv_size = sizeof(struct priv_platform),
     .init = platform_init,
     .uninit = platform_uninit,
+    .exit = NULL,
     .poll_events = platform_poll_events,
     .poll_keys = platform_poll_keys,
 };

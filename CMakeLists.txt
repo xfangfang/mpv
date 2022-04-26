@@ -50,6 +50,8 @@ endif()
 
 project(mpv-vita)
 
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu11")
+
 list(APPEND mpv_sources
     ## Audio
     audio/aframe.c
@@ -283,16 +285,30 @@ endif()
 pkg_check_modules(_pkg_ass REQUIRED libass>=0.12.2)
 
 
-if (MPV_BUILD_EMULATOR)
+if (BUILD_VITA)
+    list(APPEND mpv_sources
+        osdep/vita/vita_render.c
+        osdep/vita/vita_platform.c)
+
+    list(APPEND mpv_link_libs
+		vita2d
+        SceGxm_stub
+        SceCtrl_stub
+        ScePower_stub
+        SceAppMgr_stub
+        SceDisplay_stub
+        SceSysmodule_stub
+        SceCommonDialog_stub)
+else()
     set(OpenGL_GL_PREFERENCE GLVND)
     find_package(ALSA REQUIRED)
     find_package(OpenGL REQUIRED)
     pkg_check_modules(_pkg_glfw REQUIRED glfw3)
 
     list(APPEND mpv_sources
+        audio/out/ao_alsa.c
         osdep/vita/emulator_render.c
-        osdep/vita/emulator_platform.c
-        audio/out/ao_alsa.c)
+        osdep/vita/emulator_platform.c)
 
     list(APPEND mpv_include_dirs
         ${ALSA_INCLUDE_DIRS}
@@ -305,11 +321,6 @@ if (MPV_BUILD_EMULATOR)
 
     list(APPEND mpv_compile_defs
         GLFW_INCLUDE_ES2)
-else()
-    # application informtions
-    set(VITA_APP_NAME "MPV-Vita")
-    set(VITA_TITLEID  "MPV000001")
-    set(VITA_VERSION  "01.00")
 endif()
 
 
@@ -329,9 +340,17 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${mpv_include_dirs})
 
 target_link_libraries(${PROJECT_NAME}
-    m
-    -pthread
     ${_pkg_ass_STATIC_LIBRARIES}
     ${_pkg_ffmpeg_libs}
-    ${mpv_link_libs})
+    ${mpv_link_libs}
+    -pthread
+    m)
 
+if (BUILD_VITA)
+    set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d ATTRIBUTE2=12")
+    vita_create_self(${PROJECT_NAME}.self ${PROJECT_NAME})
+    vita_create_vpk(${PROJECT_NAME}.vpk "MPV000001" ${PROJECT_NAME}.self
+        NAME "mpv-vita"
+        VERSION "01.00"
+    )
+endif()

@@ -94,7 +94,8 @@ static void handle_platform_keys(struct ui_context *ctx)
 
 static void handle_platform_events(struct ui_context *ctx)
 {
-    ui_platform_driver_vita.poll_events(ctx);
+    if (ui_platform_driver_vita.poll_events)
+        ui_platform_driver_vita.poll_events(ctx);
 }
 
 static void on_dispatch_wakeup(void *p)
@@ -224,8 +225,14 @@ static void handle_redraw(struct ui_context *ctx)
     ui_render_driver_vita.render_end(ctx);
 }
 
-static void* new_player_params(void *parent, const char *path)
+static void* new_player_params(void *parent)
 {
+    const char *path =
+#ifdef __vita__
+    "ux0:/test/test.mp4";
+#else
+    "/tmp/test.mp4";
+#endif
     struct ui_panel_player_init_params *p = talloc_ptrtype(parent, p);
     *p = (struct ui_panel_player_init_params) {
         .path = talloc_strdup(p, path),
@@ -238,7 +245,7 @@ static void main_loop(struct ui_context *ctx)
     if (!ctx)
         return;
 
-    ui_panel_common_push(ctx, &ui_panel_player, new_player_params(ctx, "/tmp/test.mp4"));
+    ui_panel_common_push(ctx, &ui_panel_player, new_player_params(ctx));
     while (true) {
         // poll and run pending async jobs
         handle_panel_events(ctx);
@@ -263,6 +270,8 @@ int main(int argc, char *argv[])
     struct ui_context *ctx = ui_context_new();
     main_loop(ctx);
     talloc_free(ctx);
+    if (ui_platform_driver_vita.exit)
+        ui_platform_driver_vita.exit();
     return 0;
 }
 

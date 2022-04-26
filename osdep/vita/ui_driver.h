@@ -21,6 +21,7 @@ struct ui_platform_driver {
     int priv_size;
     bool (*init)(struct ui_context *ctx);
     void (*uninit)(struct ui_context *ctx);
+    void (*exit)();
     void (*poll_events)(struct ui_context *ctx);
     uint32_t (*poll_keys)(struct ui_context *ctx);
 };
