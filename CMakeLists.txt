@@ -181,3 +181,8 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${MPV_INC})
 target_compile_options(${PROJECT_NAME} PRIVATE ${MPV_CFLAGS})
 target_compile_options(${PROJECT_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>)
 target_link_libraries(${PROJECT_NAME} PUBLIC ${MPV_LDFLAGS})
+
+install(TARGETS ${PROJECT_NAME} DESTINATION ${DEVKITPRO}/portlibs/switch/lib)
+install(DIRECTORY mpv
+        DESTINATION ${DEVKITPRO}/portlibs/switch/include
+        FILE_PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
