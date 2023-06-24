@@ -207,9 +207,7 @@ static bool audio_write(struct ao *ao, void **data, int samples) {
 
 static void get_state(struct ao *ao, struct mp_pcm_state *state) {
     struct priv *priv = ao->priv;
-    Result rc = audrvUpdate(&priv->driver);
-    if (R_FAILED(rc))
-        return;
+    audrvUpdate(&priv->driver);
 
     state->free_samples = state->queued_samples = 0;
     for (int i = 0; i < priv->num_buffers; ++i) {
