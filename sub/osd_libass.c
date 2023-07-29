@@ -21,6 +21,10 @@
 #include <string.h>
 #include <assert.h>
 
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
+
 #include "config.h"
 
 #include "mpv_talloc.h"
@@ -60,6 +64,29 @@ static void create_ass_renderer(struct osd_state *osd, struct ass_state *ass)
     ass->render = ass_renderer_init(ass->library);
     if (!ass->render)
         abort();
+
+    printf("======= configure font\n");
+#ifdef __SWITCH__
+    static char * const pl_font_names[] = {
+            [PlSharedFontType_Standard]             = "nintendo_udsg-r_std_003",
+            [PlSharedFontType_ChineseSimplified]    = "nintendo_udsg-r_org_zh-cn_003",
+            [PlSharedFontType_ExtChineseSimplified] = "nintendo_udsg-r_ext_zh-cn_003",
+            [PlSharedFontType_ChineseTraditional]   = "nintendo_udjxh-db_zh-tw_003",
+            [PlSharedFontType_KO]                   = "nintendo_udsg-r_ko_003",
+            [PlSharedFontType_NintendoExt]          = "NintendoExt003",
+        };
+
+        PlFontData font;
+        for (int i = 0; i < PlSharedFontType_Total; ++i) {
+            Result rc = plGetSharedFontByType(&font, i);
+            if (R_SUCCEEDED(rc)){
+                printf("add font: %s\n", pl_font_names[font.type]);
+                ass_add_font(ass->library, pl_font_names[font.type], font.address, font.size);
+            }
+            else
+                MP_ERR(ass, "Failed to add font %s from pl: %#x\n", pl_font_names[i], rc);
+        }
+#endif
 
     mp_ass_configure_fonts(ass->render, osd->opts->osd_style,
                            osd->global, ass->log);
