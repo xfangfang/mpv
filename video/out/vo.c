@@ -65,9 +65,7 @@ extern const struct vo_driver video_out_vaapi;
 extern const struct vo_driver video_out_dmabuf_wayland;
 extern const struct vo_driver video_out_wlshm;
 extern const struct vo_driver video_out_rpi;
-extern const struct vo_driver video_out_tct;
 extern const struct vo_driver video_out_sixel;
-extern const struct vo_driver video_out_kitty;
 
 static const struct vo_driver *const video_out_drivers[] =
 {
@@ -106,7 +104,6 @@ static const struct vo_driver *const video_out_drivers[] =
     &video_out_null,
     // should not be auto-selected
     &video_out_image,
-    &video_out_tct,
 #if HAVE_CACA
     &video_out_caca,
 #endif
@@ -119,7 +116,6 @@ static const struct vo_driver *const video_out_drivers[] =
 #if HAVE_SIXEL
     &video_out_sixel,
 #endif
-    &video_out_kitty,
     &video_out_lavc,
 };
 

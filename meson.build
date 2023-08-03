@@ -230,8 +230,6 @@ sources = files(
     'video/out/vo_lavc.c',
     'video/out/vo_libmpv.c',
     'video/out/vo_null.c',
-    'video/out/vo_tct.c',
-    'video/out/vo_kitty.c',
     'video/out/win_state.c',
     'video/repack.c',
     'video/sws_utils.c',
@@ -292,6 +290,7 @@ if cc.get_id() == 'clang'
     flags += clang_flags
 endif
 
+psvita = host_machine.system() == 'psvita'
 darwin = host_machine.system() == 'darwin'
 win32 = host_machine.system() == 'cygwin' or host_machine.system() == 'windows'
 posix = not win32
@@ -309,6 +308,10 @@ endif
 
 if host_machine.system() == 'cygwin'
     flags += [mswin_flags, '-mwin32']
+endif
+
+if psvita
+    flags += ['-D__PSV__']
 endif
 
 noexecstack = false
@@ -366,6 +369,10 @@ if features['win32-internal-pthreads']
     sources += files('osdep/win32/pthread.c')
 endif
 
+if psvita
+    includedir += include_directories('osdep/vita/include')
+endif
+
 pthread_debug = get_option('pthread-debug').require(
     win32_pthreads.disabled(),
     error_message: 'win32-internal-pthreads was found!',
@@ -398,6 +405,12 @@ if features['cocoa']
                      'video/out/cocoa/window.m')
 endif
 
+if psvita
+    path_source = files('osdep/path-unix.c')
+    sources += path_source + \
+               files('osdep/polldev.c',
+                     'osdep/terminal-dummy.c')
+else
 if posix
     path_source = files('osdep/path-unix.c')
     subprocess_source = files('osdep/subprocess-posix.c')
@@ -406,6 +419,7 @@ if posix
                      'osdep/polldev.c',
                      'osdep/terminal-unix.c',
                      'sub/filter_regex.c')
+endif
 endif
 
 if posix and not features['cocoa']
@@ -503,7 +517,7 @@ if features['win32-desktop']
                      'video/out/win32/droptarget.c')
 endif
 
-if not posix and not features['win32-desktop']
+if psvita or not posix and not features['win32-desktop']
     subprocess_source = files('osdep/subprocess-dummy.c')
     sources += subprocess_source + files('input/ipc-dummy.c')
 endif
@@ -1713,7 +1727,7 @@ major = client_h_define.split('|')[0].split('<<')[0].strip('() ')
 minor = client_h_define.split('|')[1].strip('() ')
 client_api_version = major + '.' + minor + '.0'
 
-libmpv = library('mpv', sources, dependencies: dependencies, gnu_symbol_visibility: 'hidden',
+libmpv = library('mpv', sources, pic: false, dependencies: dependencies, gnu_symbol_visibility: 'hidden',
                  version: client_api_version, include_directories: includedir,
                  install: get_option('libmpv'), build_by_default: get_option('libmpv'))
 
