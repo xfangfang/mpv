@@ -334,11 +334,7 @@ endif
 
 features += {'ta-leak-report': get_option('ta-leak-report')}
 
-libdl = dependency('dl', required: false)
-features += {'libdl': libdl.found()}
-if features['libdl']
-    dependencies += libdl
-endif
+features += {'libdl': false}
 
 cplugins = get_option('cplugins').require(
     features['libdl'] and not win32 and cc.has_link_argument('-rdynamic'),
@@ -407,9 +403,7 @@ endif
 
 if psvita
     path_source = files('osdep/path-unix.c')
-    sources += path_source + \
-               files('osdep/polldev.c',
-                     'osdep/terminal-dummy.c')
+    sources += path_source + files('osdep/terminal-dummy.c')
 else
 if posix
     path_source = files('osdep/path-unix.c')
@@ -884,6 +878,9 @@ if features['wasapi']
                      'audio/out/ao_wasapi_utils.c')
 endif
 
+# if psvita
+#    sources += files('audio/out/ao_vita.c')
+# endif
 
 # video output dependencies
 caca_opt = get_option('caca').require(
