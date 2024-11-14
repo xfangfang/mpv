@@ -292,9 +292,10 @@ if cc.get_id() == 'clang'
     flags += clang_flags
 endif
 
+psvita = host_machine.system() == 'psvita'
 darwin = host_machine.system() == 'darwin'
 win32 = host_machine.system() == 'cygwin' or host_machine.system() == 'windows'
-posix = not win32
+posix = not win32 and not psvita
 
 features += {'darwin': darwin}
 features += {'posix': posix}
@@ -309,6 +310,11 @@ endif
 
 if host_machine.system() == 'cygwin'
     flags += [mswin_flags, '-mwin32']
+endif
+
+if psvita
+    flags += ['-D__PSV__']
+    link_flags += ['-Wl,-q', '-Wl,-z,nocopyreloc']
 endif
 
 noexecstack = false
@@ -333,7 +339,7 @@ features += {'ta-leak-report': get_option('ta-leak-report')}
 
 libdl = dependency('dl', required: false)
 features += {'libdl': libdl.found()}
-if features['libdl']
+if features['libdl'] and not psvita
     dependencies += libdl
 endif
 
@@ -396,6 +402,24 @@ if features['cocoa']
                      'video/out/cocoa/events_view.m',
                      'video/out/cocoa/video_view.m',
                      'video/out/cocoa/window.m')
+endif
+
+vita_dependencies = []
+if psvita
+#    vita_libs = '-L/usr/local/vitasdk/arm-vita-eabi/lib'
+#    vita_dependencies += [
+#        declare_dependency(link_args : [vita_libs, '-lSceGxm_stub']),
+#        declare_dependency(link_args : [vita_libs, '-lSceDisplay_stub']),
+#        declare_dependency(link_args : [vita_libs, '-lSceCtrl_stub']),
+#    ]
+    includedir += include_directories('osdep/vita/include')
+    dependencies += vita_dependencies
+    sources += files('osdep/terminal-dummy.c',
+                     'osdep/vita/nanovg.c',
+                     'osdep/path-unix.c',
+                     'osdep/timer-linux.c',
+                     'osdep/language-posix.c',
+                     'osdep/main-fn-vita.c')
 endif
 
 if posix
@@ -1713,7 +1737,7 @@ major = client_h_define.split('|')[0].split('<<')[0].strip('() ')
 minor = client_h_define.split('|')[1].strip('() ')
 client_api_version = major + '.' + minor + '.0'
 
-libmpv = library('mpv', sources, dependencies: dependencies, gnu_symbol_visibility: 'hidden',
+libmpv = library('mpv', sources, pic: false, dependencies: dependencies, gnu_symbol_visibility: 'hidden',
                  version: client_api_version, include_directories: includedir,
                  install: get_option('libmpv'), build_by_default: get_option('libmpv'))
 
@@ -1758,6 +1782,52 @@ if get_option('cplayer')
 
     mpv = executable('mpv', objects: libmpv.extract_all_objects(recursive: true), dependencies: dependencies,
                      win_subsystem: 'windows,6.0', include_directories: includedir, install: true)
+
+    create_vita_self = custom_target('create_vita_self',
+                  input: mpv,
+                  output: 'mpv.self',
+                  command: [
+#                      'arm-vita-eabi-strip', '-g', 'mpv',
+#                      '&&',
+                      'vita-elf-create', 'mpv', 'mpv.velf',
+                      '&&',
+                      'vita-make-fself', '-c', 'mpv.velf', 'mpv.self'
+                  ],
+                  depends: mpv,
+                  build_by_default: true
+    )
+
+    send_eboot = custom_target('send_eboot',
+                  input: create_vita_self,
+                  output: 'mpv.self.send',
+                  command: [
+                      'curl', '-T', 'mpv.self', 'ftp://192.168.1.140:1337/ux0:/app/MPV000000/eboot.bin',
+                  ],
+                  depends: create_vita_self,
+                  build_by_default: true
+    )
+
+    create_vita_vpk = custom_target('create_vita_vpk',
+                  input: create_vita_self,
+                  output: 'mpv.vpk',
+                  command: [
+                      'vita-mksfoex', '-d', 'ATTRIBUTE2=12', '-s', 'APP_VER=01.00', '-s', 'TITLE_ID=MPV000000', 'mpv', 'mpv.vpk_param.sfo',
+                      '&&',
+                      'vita-pack-vpk', '-a', '../etc/sce_sys=sce_sys', '-s', 'mpv.vpk_param.sfo', '-b', 'mpv.self', 'mpv.vpk'
+                  ],
+                  depends: create_vita_self,
+                  build_by_default: false
+    )
+
+    send_vpk = custom_target('send_vpk',
+                  input: create_vita_self,
+                  output: 'mpv.vpk.send',
+                  command: [
+                      'curl', '-T', 'mpv.vpk', 'ftp://192.168.1.140:1337/ux0:/',
+                  ],
+                  depends: create_vita_vpk,
+                  build_by_default: false
+    )
 endif
 
 if get_option('tests')
