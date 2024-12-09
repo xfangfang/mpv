@@ -38,3 +38,6 @@ struct libmpv_gpu_context_fns {
 };
 
 extern const struct libmpv_gpu_context_fns libmpv_gpu_context_gl;
+#if HAVE_GXM
+extern const struct libmpv_gpu_context_fns libmpv_gpu_context_gxm;
+#endif

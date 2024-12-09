@@ -1249,6 +1249,7 @@ static struct mp_pass_perf render_pass_quad(struct gl_video *p,
             .dim_v = 2,
             .dim_m = 1,
             .offset = p->vao_len * sizeof(struct vertex_pt),
+            .semantic = p->ra->glsl_gxm ? talloc_asprintf(p, "TEXCOORD%d", p->vao_len - 1) : NULL,
         });
     }
 
@@ -2359,7 +2360,7 @@ static void pass_convert_yuv(struct gl_video *p)
     gl_sc_uniform_mat3(sc, "colormatrix", true, &m.m[0][0]);
     gl_sc_uniform_vec3(sc, "colormatrix_c", m.c);
 
-    GLSL(color.rgb = mat3(colormatrix) * color.rgb + colormatrix_c;)
+    GLSL(color.rgb = mul(colormatrix, color.rgb) + colormatrix_c;)
 
     if (cparams.color.space == MP_CSP_XYZ) {
         pass_delinearize(p->sc, p->image_params.color.gamma);

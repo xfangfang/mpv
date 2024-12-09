@@ -315,6 +315,11 @@ endif
 if psvita
     flags += ['-D__PSV__']
     link_flags += ['-Wl,-q', '-Wl,-z,nocopyreloc']
+    if (get_option('vitashark').allowed())
+        features += {'vitashark': true}
+        flags += ['-DUSE_VITA_SHARK']
+        link_flags += ['-lvitashark', '-lSceShaccCgExt', '-ltaihen_stub', '-lSceShaccCg_stub']
+    endif
 endif
 
 noexecstack = false
@@ -338,8 +343,8 @@ endif
 features += {'ta-leak-report': get_option('ta-leak-report')}
 
 libdl = dependency('dl', required: false)
-features += {'libdl': libdl.found()}
-if features['libdl'] and not psvita
+features += {'libdl': libdl.found() and not psvita}
+if features['libdl']
     dependencies += libdl
 endif
 
@@ -404,22 +409,18 @@ if features['cocoa']
                      'video/out/cocoa/window.m')
 endif
 
-vita_dependencies = []
 if psvita
-#    vita_libs = '-L/usr/local/vitasdk/arm-vita-eabi/lib'
-#    vita_dependencies += [
-#        declare_dependency(link_args : [vita_libs, '-lSceGxm_stub']),
-#        declare_dependency(link_args : [vita_libs, '-lSceDisplay_stub']),
-#        declare_dependency(link_args : [vita_libs, '-lSceCtrl_stub']),
-#    ]
+    features += {'gxm': get_option('gxm').allowed()}
     includedir += include_directories('osdep/vita/include')
-    dependencies += vita_dependencies
     sources += files('osdep/terminal-dummy.c',
                      'osdep/vita/nanovg.c',
                      'osdep/path-unix.c',
                      'osdep/timer-linux.c',
                      'osdep/language-posix.c',
-                     'osdep/main-fn-vita.c')
+                     'osdep/main-fn-vita.c',
+                     'video/out/gxm/libmpv_gxm.c',
+                     'video/out/gxm/ra_gxm.c',
+    )
 endif
 
 if posix

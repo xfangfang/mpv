@@ -45,6 +45,9 @@ extern "C"
 #define DISPLAY_PIXEL_FORMAT SCE_DISPLAY_PIXELFORMAT_A8B8G8R8
 
 static int gxm__error_status = SCE_OK;
+
+static const char *gxmnvg__easy_strerror(int code);
+
 #define GXM_PRINT_ERROR(status) sceClibPrintf("[line %d] failed with reason: %s\n", __LINE__, gxmnvg__easy_strerror(status))
 #define GXM_CHECK_RETURN(func, ret)         \
     gxm__error_status = func;               \
@@ -90,17 +93,17 @@ void nvgxmDeleteFramebuffer(NVGXMframebuffer *gxm);
 /**
  * @brief Begin a scene.
  */
-void gxmBeginFrame();
+void gxmBeginFrame(void);
 
 /**
  * @brief End a scene.
  */
-void gxmEndFrame();
+void gxmEndFrame(void);
 
 /**
  * @brief Swap the buffers.
  */
-void gxmSwapBuffer();
+void gxmSwapBuffer(void);
 
 /**
  * @brief Set the clear color.
@@ -111,12 +114,12 @@ void gxmClearColor(float r, float g, float b, float a);
  * @brief Clear the framebuffer and stencil buffer.
  * Must be called between gxmBeginFrame and gxmEndFrame.
  */
-void gxmClear();
+void gxmClear(void);
 
 /**
  * @brief Get framebuffer data.
  */
-void *gxmReadPixels();
+void *gxmReadPixels(void);
 
 /**
  * @brief Set the swap interval.
@@ -124,9 +127,9 @@ void *gxmReadPixels();
  */
 void gxmSwapInterval(int interval);
 
-int gxmDialogUpdate();
+int gxmDialogUpdate(void);
 
-unsigned short *gxmGetSharedIndices();
+unsigned short *gxmGetSharedIndices(void);
 
 int gxmCreateShader(NVGXMshaderProgram *shader, const char *name, const char *vshader, const char *fshader);
 
@@ -135,71 +138,6 @@ void gxmDeleteShader(NVGXMshaderProgram *prog);
 void gpu_unmap_free(SceUID uid);
 
 void *gpu_alloc_map(SceKernelMemBlockType type, SceGxmMemoryAttribFlags gpu_attrib, size_t size, SceUID *uid);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif // NANOVG_GXM_UTILS_H
-
-#ifdef NANOVG_GXM_UTILS_IMPLEMENTATION
-
-#include <psp2/display.h>
-#include <psp2/kernel/clib.h>
-#include <psp2/common_dialog.h>
-
-#include <stdlib.h>
-#include <string.h>
-
-struct display_queue_callback_data {
-    void *addr;
-};
-
-struct clear_vertex {
-    float x, y;
-};
-
-static struct gxm_internal {
-    SceGxmContext *context;
-    SceGxmShaderPatcher *shader_patcher;
-    NVGXMinitOptions initOptions;
-
-    // clear shader
-    NVGXMshaderProgram clearProg;
-    NVGcolor *clearColor;
-    SceUID clearColorUid;
-    SceUID clearVerticesUid;
-    struct clear_vertex *clearVertices;
-
-    // shared indices
-    SceUID linearIndicesUid;
-    unsigned short *linearIndices;
-} gxm_internal;
-
-static SceUID vdm_ring_buffer_uid;
-static void *vdm_ring_buffer_addr;
-static SceUID vertex_ring_buffer_uid;
-static void *vertex_ring_buffer_addr;
-static SceUID fragment_ring_buffer_uid;
-static void *fragment_ring_buffer_addr;
-static SceUID fragment_usse_ring_buffer_uid;
-static void *fragment_usse_ring_buffer_addr;
-static SceGxmRenderTarget *gxm_render_target;
-static SceGxmColorSurface gxm_color_surfaces[DISPLAY_BUFFER_COUNT];
-static SceUID gxm_color_surfaces_uid[DISPLAY_BUFFER_COUNT];
-static void *gxm_color_surfaces_addr[DISPLAY_BUFFER_COUNT];
-static SceGxmSyncObject *gxm_sync_objects[DISPLAY_BUFFER_COUNT];
-static unsigned int gxm_front_buffer_index;
-static unsigned int gxm_back_buffer_index;
-static SceUID gxm_depth_stencil_surface_uid;
-static void *gxm_depth_stencil_surface_addr;
-static SceGxmDepthStencilSurface gxm_depth_stencil_surface;
-static SceUID gxm_shader_patcher_buffer_uid;
-static void *gxm_shader_patcher_buffer_addr;
-static SceUID gxm_shader_patcher_vertex_usse_uid;
-static void *gxm_shader_patcher_vertex_usse_addr;
-static SceUID gxm_shader_patcher_fragment_usse_uid;
-static void *gxm_shader_patcher_fragment_usse_addr;
 
 static const char *gxmnvg__easy_strerror(int code) {
     switch ((SceGxmErrorCode) code) {
@@ -261,6 +199,72 @@ static const char *gxmnvg__easy_strerror(int code) {
             return "Unknown error";
     }
 }
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // NANOVG_GXM_UTILS_H
+
+#ifdef NANOVG_GXM_UTILS_IMPLEMENTATION
+
+#include <psp2/display.h>
+#include <psp2/kernel/clib.h>
+#include <psp2/common_dialog.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+struct display_queue_callback_data {
+    void *addr;
+};
+
+struct clear_vertex {
+    float x, y;
+};
+
+static struct gxm_internal {
+    SceGxmContext *context;
+    SceGxmShaderPatcher *shader_patcher;
+    NVGXMinitOptions initOptions;
+
+    // clear shader
+    NVGXMshaderProgram clearProg;
+    NVGcolor *clearColor;
+    SceUID clearColorUid;
+    SceUID clearVerticesUid;
+    struct clear_vertex *clearVertices;
+
+    // shared indices
+    SceUID linearIndicesUid;
+    unsigned short *linearIndices;
+} gxm_internal;
+
+static SceUID vdm_ring_buffer_uid;
+static void *vdm_ring_buffer_addr;
+static SceUID vertex_ring_buffer_uid;
+static void *vertex_ring_buffer_addr;
+static SceUID fragment_ring_buffer_uid;
+static void *fragment_ring_buffer_addr;
+static SceUID fragment_usse_ring_buffer_uid;
+static void *fragment_usse_ring_buffer_addr;
+static SceGxmRenderTarget *gxm_render_target;
+static SceGxmColorSurface gxm_color_surfaces[DISPLAY_BUFFER_COUNT];
+static SceUID gxm_color_surfaces_uid[DISPLAY_BUFFER_COUNT];
+static void *gxm_color_surfaces_addr[DISPLAY_BUFFER_COUNT];
+static SceGxmSyncObject *gxm_sync_objects[DISPLAY_BUFFER_COUNT];
+static unsigned int gxm_front_buffer_index;
+static unsigned int gxm_back_buffer_index;
+static SceUID gxm_depth_stencil_surface_uid;
+static void *gxm_depth_stencil_surface_addr;
+static SceGxmDepthStencilSurface gxm_depth_stencil_surface;
+static SceUID gxm_shader_patcher_buffer_uid;
+static void *gxm_shader_patcher_buffer_addr;
+static SceUID gxm_shader_patcher_vertex_usse_uid;
+static void *gxm_shader_patcher_vertex_usse_addr;
+static SceUID gxm_shader_patcher_fragment_usse_uid;
+static void *gxm_shader_patcher_fragment_usse_addr;
 
 static void display_queue_callback(const void *callbackData) {
     SceDisplayFrameBuf display_fb;
@@ -393,7 +397,6 @@ NVGXMframebuffer *nvgxmCreateFramebuffer(const NVGXMinitOptions *opts) {
     NVGXMframebuffer *fb = NULL;
     fb = (NVGXMframebuffer *) malloc(sizeof(NVGXMframebuffer));
     if (fb == NULL) {
-        nvgxmDeleteFramebuffer(fb);
         return NULL;
     }
     memset(fb, 0, sizeof(NVGXMframebuffer));
@@ -561,7 +564,8 @@ NVGXMframebuffer *nvgxmCreateFramebuffer(const NVGXMinitOptions *opts) {
                                          "	return float4(position, 1.f, 1.f);\n"
                                          "}\n";
 
-    static const char *clearFragShader = "float4 main(uniform float4 color : BUFFER[0]) : COLOR\n"
+    static const char *clearFragShader = "#pragma register_buffer BUFFER[0]\n"
+                                         "float4 main(uniform float4 color : BUFFER[0]) : COLOR\n"
                                          "{\n"
                                          "	return color;\n"
                                          "}\n";
@@ -621,7 +625,11 @@ NVGXMframebuffer *nvgxmCreateFramebuffer(const NVGXMinitOptions *opts) {
             0x00
     };
 #endif
-    gxmCreateShader(&gxm_internal.clearProg, "clear", (const char*)clearVertShader, (const char*)clearFragShader);
+    if (gxmCreateShader(&gxm_internal.clearProg, "clear", (const char *) clearVertShader,
+                        (const char *) clearFragShader) == 0) {
+        nvgxmDeleteFramebuffer(fb);
+        return NULL;
+    }
 
     gxm_internal.clearVertices = (struct clear_vertex *) gpu_alloc_map(
             SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE,
@@ -717,7 +725,7 @@ void gxmClearColor(float r, float g, float b, float a) {
     GXM_CHECK_VOID(sceGxmSetFragmentUniformBuffer(gxm_internal.context, 0, gxm_internal.clearColor->rgba));
 }
 
-void gxmClear() {
+void gxmClear(void) {
     sceGxmSetVertexProgram(gxm_internal.context, gxm_internal.clearProg.vert);
     sceGxmSetFragmentProgram(gxm_internal.context, gxm_internal.clearProg.frag);
 
@@ -735,7 +743,7 @@ void gxmClear() {
                3);
 }
 
-void gxmBeginFrame() {
+void gxmBeginFrame(void) {
     GXM_CHECK_VOID(sceGxmBeginScene(gxm_internal.context,
                                     0,
                                     gxm_render_target,
@@ -746,11 +754,11 @@ void gxmBeginFrame() {
                                     &gxm_depth_stencil_surface));
 }
 
-void gxmEndFrame() {
+void gxmEndFrame(void) {
     GXM_CHECK_VOID(sceGxmEndScene(gxm_internal.context, NULL, NULL));
 }
 
-void gxmSwapBuffer() {
+void gxmSwapBuffer(void) {
     struct display_queue_callback_data queue_cb_data;
     queue_cb_data.addr = gxm_color_surfaces_addr[gxm_back_buffer_index];
 
@@ -767,8 +775,7 @@ void gxmSwapInterval(int interval) {
     gxm_internal.initOptions.swapInterval = interval;
 }
 
-int gxmDialogUpdate()
-{
+int gxmDialogUpdate(void) {
     SceCommonDialogUpdateParam updateParam;
     memset(&updateParam, 0, sizeof(updateParam));
 
@@ -785,11 +792,11 @@ int gxmDialogUpdate()
     return sceCommonDialogUpdate(&updateParam);
 }
 
-void *gxmReadPixels() {
+void *gxmReadPixels(void) {
     return sceGxmColorSurfaceGetData(&gxm_color_surfaces[gxm_front_buffer_index]);
 }
 
-unsigned short *gxmGetSharedIndices() {
+unsigned short *gxmGetSharedIndices(void) {
     return gxm_internal.linearIndices;
 }
 
@@ -827,6 +834,7 @@ int gxmCreateShader(NVGXMshaderProgram *shader, const char *name, const char *vs
         SceGxmProgram *p = shark_compile_shader(vshader, &size, SHARK_VERTEX_SHADER);
         if (!p) {
             sceClibPrintf("shark_compile_shader failed (vert): %s\n", name);
+            shark_clear_output();
             return 0;
         }
         shader->vert_gxp = (SceGxmProgram *) malloc(size);
@@ -845,6 +853,7 @@ int gxmCreateShader(NVGXMshaderProgram *shader, const char *name, const char *vs
         SceGxmProgram *p = shark_compile_shader(fshader, &size, SHARK_FRAGMENT_SHADER);
         if (!p) {
             sceClibPrintf("shark_compile_shader failed (frag): %s\n", name);
+            shark_clear_output();
             return 0;
         }
         shader->frag_gxp = (SceGxmProgram *) malloc(size);
