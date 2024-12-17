@@ -4,16 +4,18 @@
 #include <stdbool.h>
 
 #include <nanovg.h>
+
 #define NANOVG_GXM_IMPLEMENTATION
 #define NANOVG_GXM_UTILS_IMPLEMENTATION
+
 #include <nanovg_gxm.h>
 #include <psp2/ctrl.h>
 #include <psp2/kernel/clib.h>
 
 #define printf sceClibPrintf
 
-unsigned int _newlib_heap_size_user      = 220 * 1024 * 1024;
-unsigned int sceLibcHeapSize             = 24 * 1024 * 1024;
+unsigned int _newlib_heap_size_user = 220 * 1024 * 1024;
+unsigned int sceLibcHeapSize = 24 * 1024 * 1024;
 unsigned int _pthread_stack_default_user = 2 * 1024 * 1024;
 
 static int redraw = 0;
@@ -33,21 +35,22 @@ int main(int argc, char *argv[]) {
 #endif
 
     SceCtrlData pad;
-    NVGXMframebuffer *gxm = NULL;
-    NVGcontext        *vg = NULL;
+    NVGXMwindow *window = NULL;
+    NVGcontext *vg = NULL;
     NVGXMinitOptions initOptions = {
             .msaa = SCE_GXM_MULTISAMPLE_4X,
             .swapInterval = 1,
             .dumpShader = 0,
+            .scenesPerFrame = 1,
     };
 
-    gxm = nvgxmCreateFramebuffer(&initOptions);
-    if (gxm == NULL) {
+    window = gxmCreateWindow(&initOptions);
+    if (window == NULL) {
         sceClibPrintf("gxm: failed to initialize\n");
         return EXIT_FAILURE;
     }
 
-    vg = nvgCreateGXM(gxm, NVG_DEBUG);
+    vg = nvgCreateGXM(window->context, window->shader_patcher, NVG_DEBUG);
     if (vg == NULL) {
         sceClibPrintf("nanovg: failed to initialize\n");
         return EXIT_FAILURE;
@@ -61,8 +64,8 @@ int main(int argc, char *argv[]) {
 
     printf("Initialize mpv render context\n");
     mpv_gxm_init_params gxm_params = {
-            .context = gxm->context,
-            .shader_patcher = gxm->shader_patcher,
+            .context = window->context,
+            .shader_patcher = window->shader_patcher,
             .buffer_index = 2,
     };
 
@@ -149,7 +152,7 @@ int main(int argc, char *argv[]) {
     mpv_render_context_free(mpv_context);
     mpv_terminate_destroy(mpv);
     nvgDeleteGXM(vg);
-    nvgxmDeleteFramebuffer(gxm);
+    gxmDeleteWindow(window);
 
 #ifdef USE_VITA_SHARK
     // Clean up vitashark as we don't need it anymore
