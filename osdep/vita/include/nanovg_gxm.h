@@ -415,7 +415,6 @@ static int gxmnvg__renderCreate(void *uptr) {
                                 "    float strokeAlpha = 1.0f;\n"
                                 "#endif\n"
                                 "   if (type == 0.0f) {\n" // simple color
-                                "       float2 pt = (mul(paintMat, float3(fpos,1.0))).xy;\n"
                                 "       float4 color = innerCol;\n"
                                 "       color *= strokeAlpha * scissor;\n"
                                 "       result = color;\n"
