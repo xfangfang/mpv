@@ -56,20 +56,8 @@ struct ra_renderpass_gxm {
 
     float *uniform_buffer;
     SceUID uniform_uid;
-
-    struct gxm_vao vao;
 };
 
-static bool tex_init(struct ra *ra, struct ra_tex *tex) {
-    struct ra_d3d11 *p = ra->priv;
-    struct d3d_tex *tex_p = tex->priv;
-    struct ra_tex_params *params = &tex->params;
-    goto error;
-
-    return true;
-    error:
-    return false;
-}
 
 static void gxm_tex_destroy(struct ra *ra, struct ra_tex *tex) {
     if (!tex)
@@ -144,13 +132,10 @@ static bool gxm_tex_upload(struct ra *ra, const struct ra_tex_upload_params *par
     struct ra_tex *tex = params->tex;
     struct ra_buf *buf = params->buf;
     struct ra_tex_gxm *tex_gxm = tex->priv;
-    struct ra_buf_gl *buf_gl = buf ? buf->priv : NULL;
     assert(tex->params.host_mutable);
     assert(!params->buf || !params->src);
 
-//    if (ra->use_pbo && !params->buf)
-//        return ra_tex_upload_pbo(ra, &tex_gl->pbo, params);
-
+    // todo: 是不是可以删除这里的buf
     const void *src = params->src;
     if (buf) {
         src = (void *) params->buf_offset;
@@ -259,64 +244,6 @@ static struct ra_renderpass *gxm_renderpass_create(struct ra *ra,
         MP_ASSERT_UNREACHABLE();
     }
 
-    static const char *vert_shader = "struct VS_OUTPUT\n"
-                                     "{\n"
-                                     "    float4 position     : POSITION;\n"
-                                     "    float2 texcoord0    : TEXCOORD0;\n"
-                                     "    float2 texcoord1    : TEXCOORD1;\n"
-                                     "    float2 texcoord2    : TEXCOORD2;\n"
-                                     "};\n"
-                                     "void main(\n"
-                                     "  float2 vertex_position : POSITION,\n"
-                                     "  float2 vertex_texcoord0 : TEXCOORD0,\n"
-                                     "  float2 vertex_texcoord1 : TEXCOORD1,\n"
-                                     "  float2 vertex_texcoord2 : TEXCOORD2,\n"
-                                     "  out VS_OUTPUT output) : POSITION\n"
-                                     "{\n"
-                                     "	output.position = float4(vertex_position, 1.0f, 1.0f);\n"
-                                     "  output.texcoord0 = vertex_texcoord0;\n"
-                                     "  output.texcoord1 = vertex_texcoord1;\n"
-                                     "  output.texcoord2 = vertex_texcoord2;\n"
-                                     "}\n";
-
-    static const char *frag_shader = "#pragma pack_matrix (column_major)\n"
-                                     "uniform float3x3 colormatrix: BUFFER[1];\n"
-                                     "uniform float3 colormatrix_c: BUFFER[1];\n"
-                                     "uniform float3 src_luma: BUFFER[1];\n"
-                                     "uniform float3 dst_luma: BUFFER[1];\n"
-
-                                     "uniform sampler2D texture0 : TEXUNIT0;\n"
-                                     "uniform float2 texture_size0: BUFFER[1];\n"
-                                     "uniform float texture_rot0: BUFFER[1];\n"
-                                     "uniform float2 texture_off0: BUFFER[1];\n"
-                                     "uniform float2 pixel_size0: BUFFER[1];\n"
-
-                                     "uniform sampler2D texture1 : TEXUNIT1;\n"
-                                     "uniform float2 texture_size1: BUFFER[1];\n"
-                                     "uniform float texture_rot1: BUFFER[1];\n"
-                                     "uniform float2 texture_off1: BUFFER[1];\n"
-                                     "uniform float2 pixel_size1: BUFFER[1];\n"
-
-                                     "uniform sampler2D texture2 : TEXUNIT2;\n"
-                                     "uniform float2 texture_size2: BUFFER[1];\n"
-                                     "uniform float texture_rot2: BUFFER[1];\n"
-                                     "uniform float2 texture_off2: BUFFER[1];\n"
-                                     "uniform float2 pixel_size2: BUFFER[1];\n"
-
-                                     "float4 main(\n"
-                                     "    float2 vertex_texcoord0: TEXCOORD0,\n"
-                                     "    float2 vertex_texcoord1: TEXCOORD1,\n"
-                                     "    float2 vertex_texcoord2: TEXCOORD2\n"
-                                     ") : COLOR\n"
-                                     "{\n"
-                                     "    float4 result = float4(0.0f, 0.0f, 0.0f, 1.0f);\n"
-                                     "    result.r = tex2D(texture0, vertex_texcoord0).r;\n"
-                                     "    result.g = tex2D(texture1, vertex_texcoord1).r;\n"
-                                     "    result.b = tex2D(texture2, vertex_texcoord2).r;\n"
-                                     "    result.rgb = mul(colormatrix, result.rgb) + colormatrix_c;\n"
-                                     "	 return result;\n"
-                                     "}\n";
-
     gxmCreateShader(&p->prog, "mpv", (const char *) params->vertex_shader, (const char *) params->frag_shader);
     if (p->prog.vert_gxp == NULL || p->prog.frag_gxp == NULL) {
         talloc_free(pass);
@@ -364,7 +291,6 @@ static struct ra_renderpass *gxm_renderpass_create(struct ra *ra,
     for (int n = 0; n < pass->params.num_inputs; n++) {
         const SceGxmProgramParameter *loc = sceGxmProgramFindParameterByName(p->prog.frag_gxp, params->inputs[n].name);
         MP_TARRAY_APPEND(p, p->uniform_loc, p->num_uniform_loc, loc);
-        pass->params.inputs[n].offset = uniform_size;
         if (pass->params.inputs[n].type == RA_VARTYPE_INT || pass->params.inputs[n].type == RA_VARTYPE_FLOAT) {
             uniform_size += ALIGN(pass->params.inputs[n].dim_m * pass->params.inputs[n].dim_v, 4);
         }
