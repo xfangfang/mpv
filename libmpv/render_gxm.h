@@ -19,6 +19,7 @@
 #include <psp2/gxm.h>
 
 #include "render.h"
+#include "nanovg_gxm_utils.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,6 +36,25 @@ typedef struct mpv_gxm_init_params {
     SceGxmShaderPatcher *shader_patcher;
     int buffer_index;
 } mpv_gxm_init_params;
+
+/**
+ * For MPV_RENDER_PARAM_GXM_FBO.
+ */
+typedef struct mpv_gxm_fbo {
+    /**
+     * Texture object.
+     */
+    NVGXMframebuffer *tex;
+    /**
+     * Valid dimensions. This must refer to the size of the framebuffer. This
+     * must always be set.
+     */
+    int w, h;
+    /**
+     * Underlying texture internal format. This must always be set.
+     */
+    SceGxmTextureFormat format;
+} mpv_gxm_fbo;
 
 #ifdef __cplusplus
 }

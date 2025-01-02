@@ -100,10 +100,35 @@ int main(int argc, char *argv[]) {
         mpv_command(mpv, cmd);
     }
 
+    int texture_width = DISPLAY_WIDTH;
+    int texture_height = DISPLAY_HEIGHT;
+    int texture_stride = ALIGN(texture_width, 8);
+    int image = nvgCreateImageRGBA(vg, texture_width, texture_height, 0, NULL);
+    NVGpaint img = nvgImagePattern(vg, 0, 0, texture_width, texture_height, 0, image, 1.0f);
+    NVGXMtexture *texture = nvgxmImageHandle(vg, image);
 
     int flip_y = 1;
-    mpv_render_param mpv_params[2] = {
+    NVGXMframebuffer *fb = NULL;
+    NVGXMframebufferInitOptions framebufferOpts = {
+            .display_buffer_count = 1, // Must be 1 for custom FBOs
+            .scenesPerFrame = 1,
+            .render_target = texture,
+            .color_format = SCE_GXM_COLOR_FORMAT_U8U8U8U8_ABGR,
+            .color_surface_type = SCE_GXM_COLOR_SURFACE_LINEAR,
+            .display_width = texture_width,
+            .display_height = texture_height,
+            .display_stride = texture_stride,
+    };
+    fb = gxmCreateFramebuffer(&framebufferOpts);
+    mpv_gxm_fbo fbo = {
+            .tex = fb,
+            .w = texture_width,
+            .h = texture_height,
+            .format = SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_RGBA,
+    };
+    mpv_render_param mpv_params[3] = {
             {MPV_RENDER_PARAM_FLIP_Y, &flip_y},
+            {MPV_RENDER_PARAM_GXM_FBO, &fbo},
             {MPV_RENDER_PARAM_INVALID, NULL},
     };
 
@@ -137,21 +162,27 @@ int main(int argc, char *argv[]) {
         gxmClear();
         nvgBeginFrame(vg, DISPLAY_WIDTH, DISPLAY_HEIGHT, 1.0f);
 
-        if (redraw && mpv_render_context_update(mpv_context) & MPV_RENDER_UPDATE_FRAME) {
-            redraw = 0;
-            mpv_render_context_render(mpv_context, mpv_params);
-        }
+        nvgBeginPath(vg);
+        nvgRect(vg, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+        nvgFillPaint(vg, img);
+        nvgFill(vg);
 
         nvgEndFrame(vg);
         gxmEndFrame();
         gxmSwapBuffer();
-        mpv_render_context_report_swap(mpv_context);
+
+        if (redraw && mpv_render_context_update(mpv_context) & MPV_RENDER_UPDATE_FRAME) {
+            redraw = 0;
+            mpv_render_context_render(mpv_context, mpv_params);
+            mpv_render_context_report_swap(mpv_context);
+        }
     }
 
     mpv_command_string(mpv, "quit");
     mpv_render_context_free(mpv_context);
     mpv_terminate_destroy(mpv);
     nvgDeleteGXM(vg);
+    gxmDeleteFramebuffer(fb);
     gxmDeleteWindow(window);
 
 #ifdef USE_VITA_SHARK

@@ -427,6 +427,11 @@ typedef enum mpv_render_param_type {
      * Type: mpv_gxm_init_params*
      */
     MPV_RENDER_PARAM_GXM_INIT_PARAMS = 21,
+    /**
+     * Describes a gxm render target. Valid for mpv_render_context_render().
+     * Type: SceGxmTexture*
+     */
+    MPV_RENDER_PARAM_GXM_FBO = 22,
 } mpv_render_param_type;
 
 /**

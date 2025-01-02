@@ -5,52 +5,30 @@
 #include "osdep/subprocess.h"
 #include "osdep/timer.h"
 #include "video/out/gpu/utils.h"
-
-#include "ra_gxm.h"
+#include "video/out/gxm/ra_gxm.h"
 
 #include "osdep/vita/include/nanovg_gxm_utils.h"
 #include "nanovg_gxm_utils.h"
 
 
-struct ra_gxm {
-    SceGxmContext *context;
-    SceGxmShaderPatcher *shader_patcher;
-
-    // uniform buffer index
-    int buffer_index;
-};
-
-struct ra_tex_gxm {
-    SceGxmTexture gxm_tex;
-    uint8_t *tex_data;
-    SceUID data_UID;
-    SceGxmTextureFormat format;
-};
-
-struct gxm_buf {
-    void *data; // System-memory mirror of the data in buf
-    bool dirty; // Is buf out of date?
-};
-
-// See deko3d format_traits.inc
 const struct gxm_format gxm_formats[] = {
-        {"r8",      1, 1, {8},              SCE_GXM_TEXTURE_FORMAT_U8_R,              RA_CTYPE_UNORM, true, true, true,  true},
-        {"rg8",     2, 2, {8,  8},          SCE_GXM_TEXTURE_FORMAT_U8U8_GR,           RA_CTYPE_UNORM, true, true, true,  true},
+        {"r8",      1, 1, {8},              SCE_GXM_TEXTURE_FORMAT_U8_000R,              RA_CTYPE_UNORM, true, true, true,  true},
+        {"rg8",     2, 2, {8,  8},          SCE_GXM_TEXTURE_FORMAT_U8U8_GRGR,           RA_CTYPE_UNORM, true, true, true,  true},
         {"rgba8",   4, 4, {8,  8,  8,  8},  SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_RGBA,     RA_CTYPE_UNORM, true, true, true,  true},
-        {"r16",     1, 2, {16},             SCE_GXM_TEXTURE_FORMAT_U16_R,             RA_CTYPE_UNORM, true, true, true,  true},
-        {"rg16",    2, 4, {16, 16},         SCE_GXM_TEXTURE_FORMAT_U16U16_GR,         RA_CTYPE_UNORM, true, true, true,  true},
+        {"r16",     1, 2, {16},             SCE_GXM_TEXTURE_FORMAT_U16_000R,             RA_CTYPE_UNORM, true, true, true,  true},
+        {"rg16",    2, 4, {16, 16},         SCE_GXM_TEXTURE_FORMAT_U16U16_GRGR,         RA_CTYPE_UNORM, true, true, true,  true},
         {"rgba16",  4, 8, {16, 16, 16, 16}, SCE_GXM_TEXTURE_FORMAT_U16U16U16U16_RGBA, RA_CTYPE_UNORM, true, true, true,  true},
 
-        {"r32ui",    1, 4,  {32},             SCE_GXM_TEXTURE_FORMAT_S32_R,               RA_CTYPE_UINT,  true,  false, true,  true},
+        {"r32ui",    1, 4,  {32},             SCE_GXM_TEXTURE_FORMAT_S32_000R,               RA_CTYPE_UINT,  true,  false, true,  true},
 //        {"rg32ui",   2, 8,  {32, 32},         DkImageFormat_RG32_Uint,              RA_CTYPE_UINT,  true,  false, true,  true},
 //        {"rgb32ui",  3, 12, {32, 32, 32},     DkImageFormat_RGB32_Uint,             RA_CTYPE_UINT,  false, false, false, true},
 //        {"rgba32ui", 4, 16, {32, 32, 32, 32}, DkImageFormat_RGBA32_Uint,            RA_CTYPE_UINT,  true,  false, true,  true},
 //
-        {"r16f",    1, 2, {16},             SCE_GXM_TEXTURE_FORMAT_F16_R,             RA_CTYPE_FLOAT, true, true, true,  true},
-        {"rg16f",   2, 4, {16, 16},         SCE_GXM_TEXTURE_FORMAT_F16F16_GR,         RA_CTYPE_FLOAT, true, true, true,  true},
+        {"r16f",    1, 2, {16},             SCE_GXM_TEXTURE_FORMAT_F16_000R,             RA_CTYPE_FLOAT, true, true, true,  true},
+        {"rg16f",   2, 4, {16, 16},         SCE_GXM_TEXTURE_FORMAT_F16F16_GRGR,         RA_CTYPE_FLOAT, true, true, true,  true},
         {"rgba16f", 4, 8, {16, 16, 16, 16}, SCE_GXM_TEXTURE_FORMAT_F16F16F16F16_RGBA, RA_CTYPE_FLOAT, true, true, true,  true},
-        {"r32f",    1, 4, {32},             SCE_GXM_TEXTURE_FORMAT_F32_R,             RA_CTYPE_FLOAT, true, true, true,  true},
-        {"rg32f",   2, 8, {32, 32},         SCE_GXM_TEXTURE_FORMAT_F32F32_GR,         RA_CTYPE_FLOAT, true, true, true,  true},
+        {"r32f",    1, 4, {32},             SCE_GXM_TEXTURE_FORMAT_F32_000R,             RA_CTYPE_FLOAT, true, true, true,  true},
+        {"rg32f",   2, 8, {32, 32},         SCE_GXM_TEXTURE_FORMAT_F32F32_GRGR,         RA_CTYPE_FLOAT, true, true, true,  true},
 //        {"rgb32f",   3, 12, {32, 32, 32},     SCE_GXM_TEXTURE_FORMAT_F32_R,            RA_CTYPE_FLOAT, false, false, false, true},
 //        {"rgba32f",  4, 16, {32, 32, 32, 32}, DkImageFormat_RGBA32_Float,           RA_CTYPE_FLOAT, true,  true,  true,  true},
 //
@@ -105,15 +83,16 @@ static struct ra_tex *gxm_tex_create(struct ra *ra,
         return NULL;
 
     int ret;
-    struct ra_gxm *p = ra->priv;
     struct ra_tex *tex = talloc_zero(NULL, struct ra_tex);
     if (!tex) {
         goto error;
     }
 
+    assert(params->format != NULL);
     const struct gxm_format *fmt = params->format->priv;
     int aligned_width = ALIGN(params->w, SCE_GXM_TEXTURE_ALIGNMENT);
     int tex_size = aligned_width * params->h * fmt->bytes;
+    const unsigned char * data = params->initial_data;
     tex->params = *params;
     tex->params.initial_data = NULL;
 
@@ -129,7 +108,14 @@ static struct ra_tex *gxm_tex_create(struct ra *ra,
     if (tex_gxm->tex_data == NULL) {
         goto error;
     }
-    memset(tex_gxm->tex_data, 0, tex_size);
+
+    if (data == NULL) {
+        memset(tex_gxm->tex_data, 0, tex_size);
+    } else {
+        for (int i = 0; i < params->h; i++) {
+            memcpy(tex_gxm->tex_data + i * aligned_width, data + i * params->w * fmt->bytes, params->w * fmt->bytes);
+        }
+    }
 
     ret = sceGxmTextureInitLinear(&tex_gxm->gxm_tex, tex_gxm->tex_data, fmt->format,
                                   aligned_width, params->h, 0);
@@ -151,26 +137,6 @@ static struct ra_tex *gxm_tex_create(struct ra *ra,
     error:
     gxm_tex_destroy(ra, tex);
     return NULL;
-}
-
-struct ra_tex *ra_gxm_wrap_tex(struct ra *ra) {
-    struct ra_tex *tex = talloc_zero(NULL, struct ra_tex);
-
-    // TODO: 目前暂时假定屏幕默认渲染区域为输入的 FBO
-    tex->params.dimensions = 2;
-    tex->params.w = 960;
-    tex->params.h = 544;
-    tex->params.d = 1;
-    for (int n = 0; n < ra->num_formats; n++) {
-        const struct ra_format *fmt = ra->formats[n];
-        const struct gxm_format * gf = fmt->priv;
-        if (gf->format == SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_RGBA) {
-            tex->params.format = fmt;
-            break;
-        }
-    }
-
-    return tex;
 }
 
 
@@ -241,10 +207,7 @@ static void gxm_buf_update(struct ra *ra, struct ra_buf *buf, ptrdiff_t offset,
 
 static void gxm_clear(struct ra *ra, struct ra_tex *tex, float color[4],
                   struct mp_rect *rc) {
-    // todo: 完善 clear，只清空部分区域
-    struct ra_d3d11 *p = ra->priv;
-    struct d3d_tex *tex_p = tex->priv;
-    struct ra_tex_params *params = &tex->params;
+    gxmScissor(rc->x0, rc->y0, rc->x1 - rc->x0, rc->y1 - rc->y0);
     gxmClearColor(color[0], color[1], color[2], color[3]);
     gxmClear();
 }
@@ -424,6 +387,8 @@ static void gxm_renderpass_run(struct ra *ra,
     enum ra_renderpass_type type = pass->params.type;
     struct ra_renderpass_gxm *p = pass->priv;
 
+    assert(type != RA_RENDERPASS_TYPE_COMPUTE);
+
     sceGxmSetVertexProgram(gxm->context, p->prog.vert);
     sceGxmSetFragmentProgram(gxm->context, p->prog.frag);
     memcpy(p->vertices, params->vertex_data, pass->params.vertex_stride * params->vertex_count);
@@ -453,10 +418,7 @@ static void gxm_renderpass_run(struct ra *ra,
             }
             case RA_VARTYPE_IMG_W:
             case RA_VARTYPE_BUF_RO:
-            case RA_VARTYPE_BUF_RW: {
-                MP_ASSERT_UNREACHABLE();
-                break;
-            }
+            case RA_VARTYPE_BUF_RW:
             default:
                 MP_ASSERT_UNREACHABLE();
         }
@@ -526,7 +488,7 @@ ra_gxm_create(SceGxmContext *context, SceGxmShaderPatcher *shader_patcher, struc
     ra->glsl_gxm = true;
     ra->gxm_buffer_index = buffer_index;
 
-    ra->caps = RA_CAP_TEX_1D | RA_CAP_DIRECT_UPLOAD | RA_CAP_GLOBAL_UNIFORM;
+    ra->caps = RA_CAP_DIRECT_UPLOAD | RA_CAP_GLOBAL_UNIFORM;
 
     struct ra_gxm *p = ra->priv = talloc_zero(ra, struct ra_gxm);
     p->context = context;
