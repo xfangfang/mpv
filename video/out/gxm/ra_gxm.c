@@ -231,6 +231,27 @@ static void gxm_renderpass_destroy(struct ra *ra, struct ra_renderpass *pass) {
     talloc_free(pass);
 }
 
+static SceGxmBlendFactor map_ra_blend(enum ra_blend blend)
+{
+    switch (blend) {
+        case RA_BLEND_ZERO:                return SCE_GXM_BLEND_FACTOR_ZERO;
+        case RA_BLEND_ONE:                 return SCE_GXM_BLEND_FACTOR_ONE;
+        case RA_BLEND_SRC_ALPHA:           return SCE_GXM_BLEND_FACTOR_SRC_ALPHA;
+        case RA_BLEND_ONE_MINUS_SRC_ALPHA: return SCE_GXM_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    };
+}
+
+static SceGxmAttributeFormat map_vertex_type(enum ra_vartype type) {
+    switch (type) {
+        case RA_VARTYPE_FLOAT:
+            return SCE_GXM_ATTRIBUTE_FORMAT_F32;
+        case RA_VARTYPE_BYTE_UNORM:
+            return SCE_GXM_ATTRIBUTE_FORMAT_U8N;
+        default:
+            MP_ASSERT_UNREACHABLE();
+    }
+}
+
 static struct ra_renderpass *gxm_renderpass_create(struct ra *ra,
                                                const struct ra_renderpass_params *params) {
     struct ra_gxm *gxm = ra->priv;
@@ -261,20 +282,34 @@ static struct ra_renderpass *gxm_renderpass_create(struct ra *ra,
 
         clear_vertex_attribute[i].streamIndex = 0;
         clear_vertex_attribute[i].offset = inp->offset;
-        clear_vertex_attribute[i].format = SCE_GXM_ATTRIBUTE_FORMAT_F32;
+        clear_vertex_attribute[i].format = map_vertex_type(inp->type);
         clear_vertex_attribute[i].componentCount = inp->dim_m * inp->dim_v;
         clear_vertex_attribute[i].regIndex = sceGxmProgramParameterGetResourceIndex(param);
     }
 
+    //todo: 根据实际顶点数设置大小
     p->vertices = (float *) gpu_alloc_map(
             SCE_KERNEL_MEMBLOCK_TYPE_USER_RW_UNCACHE,
             SCE_GXM_MEMORY_ATTRIB_READ,
-            pass->params.vertex_stride * 6,
+            pass->params.vertex_stride * 48,
             &p->vertices_uid);
 
     SceGxmVertexStream clear_vertex_stream[1];
     clear_vertex_stream[0].stride = pass->params.vertex_stride;
     clear_vertex_stream[0].indexSource = SCE_GXM_INDEX_SOURCE_INDEX_16BIT;
+
+    SceGxmBlendInfo *blendInfo = NULL, _blendInfo;;
+
+    if (params->enable_blend) {
+        _blendInfo.colorMask = SCE_GXM_COLOR_MASK_ALL;
+        _blendInfo.colorFunc = SCE_GXM_BLEND_FUNC_ADD;
+        _blendInfo.alphaFunc = SCE_GXM_BLEND_FUNC_ADD;
+        _blendInfo.colorSrc = map_ra_blend(params->blend_src_rgb);
+        _blendInfo.colorDst = map_ra_blend(params->blend_dst_rgb);
+        _blendInfo.alphaSrc = map_ra_blend(params->blend_src_alpha);
+        _blendInfo.alphaDst = map_ra_blend(params->blend_dst_alpha);
+        blendInfo = &_blendInfo;
+    }
 
     sceGxmShaderPatcherCreateVertexProgram(
             gxm->shader_patcher, p->prog.vert_id,
@@ -284,8 +319,8 @@ static struct ra_renderpass *gxm_renderpass_create(struct ra *ra,
 
     sceGxmShaderPatcherCreateFragmentProgram(
             gxm->shader_patcher, p->prog.frag_id,
-            SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4, SCE_GXM_MULTISAMPLE_NONE,
-            NULL, p->prog.vert_gxp,
+            SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4, SCE_GXM_MULTISAMPLE_4X,
+            blendInfo, p->prog.vert_gxp,
             &p->prog.frag);
 
     talloc_free(clear_vertex_attribute);
@@ -322,6 +357,7 @@ static void gxm_renderpass_run(struct ra *ra,
     sceGxmSetFragmentProgram(gxm->context, p->prog.frag);
     memcpy(p->vertices, params->vertex_data, pass->params.vertex_stride * params->vertex_count);
     sceGxmSetVertexStream(gxm->context, 0, p->vertices);
+    sceGxmSetFragmentUniformBuffer(gxm->context, gxm->buffer_index, p->uniform_buffer);
 
     for (int n = 0; n < params->num_values; n++) {
         struct ra_renderpass_input_val *val = &params->values[n];
