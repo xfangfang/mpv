@@ -121,6 +121,9 @@ static struct ra_tex *gxm_tex_create(struct ra *ra,
     sceGxmTextureSetUAddrMode(&tex_gxm->gxm_tex, wrap);
     sceGxmTextureSetVAddrMode(&tex_gxm->gxm_tex, wrap);
 
+    tex_gxm->format = fmt->format;
+    tex_gxm->bpp = fmt->bytes;
+    tex_gxm->stride = aligned_width;
     return tex;
     error:
     gxm_tex_destroy(ra, tex);
@@ -149,12 +152,12 @@ static bool gxm_tex_upload(struct ra *ra, const struct ra_tex_upload_params *par
             struct mp_rect rc = {0, 0, tex->params.w, tex->params.h};
             if (params->rc)
                 rc = *params->rc;
-            // todo: 根据实际像素格式，设置 bpp
             // todo: psv 纹理 stride 可能和内置 stride 不同
-            int bpp = 1;
             for (int i = 0; i < rc.y1 - rc.y0; i++) {
-                int start = (i + rc.y0) * params->stride + rc.x0 * bpp;
-                memcpy(tex_gxm->tex_data + start, src + start, (rc.x1 - rc.x0) * bpp);
+                int h_offset  = rc.x0 * tex_gxm->bpp;
+                int texture_start = (i + rc.y0) * tex_gxm->stride + h_offset;
+                int src_start = (i + rc.y0) * params->stride + h_offset;
+                memcpy(tex_gxm->tex_data + texture_start, (uint8_t *)src + src_start, (rc.x1 - rc.x0) * tex_gxm->bpp);
             }
             break;
         }

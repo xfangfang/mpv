@@ -66,7 +66,7 @@ int main(int argc, char *argv[]) {
     mpv_gxm_init_params gxm_params = {
             .context = window->context,
             .shader_patcher = window->shader_patcher,
-            .buffer_index = 2,
+            .buffer_index = 0,
     };
 
     mpv_render_param params[] = {
@@ -132,9 +132,9 @@ int main(int argc, char *argv[]) {
             {MPV_RENDER_PARAM_INVALID, NULL},
     };
 
-    printf("Load a file\n");
     {
-        const char *cmd[] = {"loadfile", "file://ux0:/test.mp4", "replace", "vf=hflip", NULL};
+        const char *cmd[] = {"loadfile", "file://ux0:/test.mp4", "replace", NULL};
+//        const char *cmd[] = {"loadfile", "file://ux0:/sintel_trailer-720p.mp4", NULL};
         mpv_command(mpv, cmd);
     }
 

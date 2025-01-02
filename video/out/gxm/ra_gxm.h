@@ -18,6 +18,8 @@ struct ra_tex_gxm {
     uint8_t *tex_data;
     SceUID data_UID;
     SceGxmTextureFormat format;
+    int bpp;
+    int stride;
 };
 
 struct gxm_format {
