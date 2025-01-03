@@ -50,7 +50,7 @@ void _fprintf(char* fmt, ...) {
     va_list a;
     va_start(a, fmt);
     vsnprintf(_buf, sizeof(_buf), fmt, a);
-    sceClibPrintf(_buf);
+    sceClibPrintf("%s", _buf);
     va_end(a);
 }
 
