@@ -91,7 +91,9 @@ static void done_frame(struct libmpv_gpu_context *ctx, bool ds)
 
 static void destroy(struct libmpv_gpu_context *ctx)
 {
-
+    struct ra_ctx *ra_ctx = ctx->ra_ctx;
+    if (ra_ctx->ra)
+        ra_ctx->ra->fns->destroy(ra_ctx->ra);
 }
 
 const struct libmpv_gpu_context_fns libmpv_gpu_context_gxm = {

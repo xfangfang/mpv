@@ -45,7 +45,7 @@
 
 #if defined(HAVE_GXM)
 #include <psp2/kernel/clib.h>
-void _fprintf(char* fmt, ...) {
+static void _fprintf(char* fmt, ...) {
     static char _buf[0x100];
     va_list a;
     va_start(a, fmt);
