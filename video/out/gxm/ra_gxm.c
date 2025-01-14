@@ -133,26 +133,17 @@ static struct ra_tex *gxm_tex_create(struct ra *ra,
 
 static bool gxm_tex_upload(struct ra *ra, const struct ra_tex_upload_params *params) {
     struct ra_tex *tex = params->tex;
-    struct ra_buf *buf = params->buf;
     struct ra_tex_gxm *tex_gxm = tex->priv;
-    assert(tex->params.host_mutable);
-    assert(!params->buf || !params->src);
-
-    // todo: 是不是可以删除这里的buf
     const void *src = params->src;
-    if (buf) {
-        src = (void *) params->buf_offset;
-    }
+    assert(tex->params.host_mutable);
+    if (!src)
+        return false;
 
     switch (tex->params.dimensions) {
-        case 1:
-            //todo
-            break;
         case 2: {
             struct mp_rect rc = {0, 0, tex->params.w, tex->params.h};
             if (params->rc)
                 rc = *params->rc;
-            // todo: psv 纹理 stride 可能和内置 stride 不同
             for (int i = 0; i < rc.y1 - rc.y0; i++) {
                 int h_offset  = rc.x0 * tex_gxm->bpp;
                 int texture_start = (i + rc.y0) * tex_gxm->stride + h_offset;
@@ -161,9 +152,8 @@ static bool gxm_tex_upload(struct ra *ra, const struct ra_tex_upload_params *par
             }
             break;
         }
-        case 3:
-            //todo
-            break;
+        default:
+            MP_ASSERT_UNREACHABLE();
     }
 
     return true;
@@ -174,22 +164,19 @@ static bool gxm_tex_download(struct ra *ra, struct ra_tex_download_params *param
 }
 
 static void gxm_buf_destroy(struct ra *ra, struct ra_buf *buf) {
-    if (!buf)
-        return;
-    struct d3d_buf *buf_p = buf->priv;
-
-    talloc_free(buf);
+    MP_ASSERT_UNREACHABLE();
 }
 
 static struct ra_buf *gxm_buf_create(struct ra *ra,
                                  const struct ra_buf_params *params) {
+    MP_ASSERT_UNREACHABLE();
     return NULL;
 }
 
 
 static void gxm_buf_update(struct ra *ra, struct ra_buf *buf, ptrdiff_t offset,
                        const void *data, size_t size) {
-    struct d3d_buf *buf_p = buf->priv;
+    MP_ASSERT_UNREACHABLE();
 }
 
 
