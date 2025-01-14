@@ -78,7 +78,7 @@ static struct ra_tex *gxm_tex_create(struct ra *ra,
 
     assert(params->format != NULL);
     const struct gxm_format *fmt = params->format->priv;
-    int aligned_width = ALIGN(params->w, SCE_GXM_TEXTURE_ALIGNMENT);
+    int aligned_width = MP_ALIGN_UP(params->w, 8);
     int tex_size = aligned_width * params->h * fmt->bytes;
     const unsigned char * data = params->initial_data;
     tex->params = *params;

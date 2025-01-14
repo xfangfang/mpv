@@ -1277,11 +1277,21 @@ static struct mp_pass_perf render_pass_quad(struct gl_video *p,
             struct gl_transform tr = s->transform;
             float tx = (n / 2) * s->w;
             float ty = (n % 2) * s->h;
+            int tex_width = s->tex->params.w;
+            int tex_height = s->tex->params.h;
+
+            if (p->ra->glsl_gxm) {
+                int aligned_width = MP_ALIGN_UP(s->tex->params.w, 8);
+                // Add 1 extra pixel to avoid float precision issues
+                if (aligned_width != s->tex->params.w)
+                    tex_width = aligned_width + 1;
+            }
+
             gl_transform_vec(tr, &tx, &ty);
             bool rect = s->tex->params.non_normalized;
             // vec2 texcoordN in idx N+1
-            vs[i + 1].x = tx / (rect ? 1 : s->tex->params.w);
-            vs[i + 1].y = ty / (rect ? 1 : s->tex->params.h);
+            vs[i + 1].x = tx / (rect ? 1 : tex_width);
+            vs[i + 1].y = ty / (rect ? 1 : tex_height);
         }
     }
 
