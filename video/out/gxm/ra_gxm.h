@@ -6,9 +6,37 @@
 #include "video/out/gpu/ra.h"
 #include "video/out/gpu/spirv.h"
 
+#define MAX_VERTEX_POINTS 48
+
+typedef struct GxmShaderProgram {
+    SceGxmShaderPatcherId vert_id;
+    SceGxmShaderPatcherId frag_id;
+
+    SceGxmVertexProgram *vert;
+    SceGxmFragmentProgram *frag;
+
+    SceGxmProgram *vert_gxp;
+    SceGxmProgram *frag_gxp;
+} GxmShaderProgram;
+
+struct mp_gxm_clear_vertex {
+    float x, y;
+};
+
 struct ra_gxm {
     SceGxmContext *context;
     SceGxmShaderPatcher *shader_patcher;
+
+    // clear shader
+    GxmShaderProgram clearProg;
+    const SceGxmProgramParameter *clearParam;
+    SceUID clearVerticesUid;
+    struct mp_gxm_clear_vertex *clearVertices;
+
+    // shared linear indices
+    SceUID linearIndicesUid;
+    unsigned short *linearIndices;
+
     // uniform buffer index
     int buffer_index;
 };
@@ -31,13 +59,6 @@ struct gxm_format {
     enum ra_ctype ctype;
     bool renderable, linear_filter, storable, ordered;
 };
-
-//// Get the underlying DXGI format from an RA format
-//DXGI_FORMAT ra_d3d11_get_format(const struct ra_format *fmt);
-//
-//// Gets the matching ra_format for a given DXGI format.
-//// Returns a nullptr in case of no known match.
-//const struct ra_format *ra_d3d11_get_ra_format(struct ra *ra, DXGI_FORMAT fmt);
 
 // Create an RA instance from a D3D11 device. This takes a reference to the
 // device, which is released when the RA instance is destroyed.
