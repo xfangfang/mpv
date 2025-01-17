@@ -8,11 +8,19 @@ struct priv {
     SceGxmContext *context;
     SceGxmShaderPatcher *shader_patcher;
     struct ra_ctx *ra_ctx;
-    struct ra_tex *tex;
+    struct ra_tex *cur_fbo;
+};
+
+struct gxm_fbo_priv {
+    SceGxmRenderTarget *render_target;
+    SceGxmColorSurface *color_surface;
+    SceGxmDepthStencilSurface *depth_stencil_surface;
 };
 
 static int init(struct libmpv_gpu_context *ctx, mpv_render_param *params)
 {
+    MP_VERBOSE(ctx, "Creating libmpv gxm context\n");
+
     struct priv *p = ctx->priv = talloc_zero(NULL, struct priv);
 
     mpv_gxm_init_params *init_params =
@@ -32,7 +40,8 @@ static int init(struct libmpv_gpu_context *ctx, mpv_render_param *params)
     if (!p->ra_ctx->ra)
         return MPV_ERROR_UNSUPPORTED;
 
-    p->tex = talloc_zero(p, struct ra_tex);
+    p->cur_fbo = talloc_zero(p, struct ra_tex);
+    p->cur_fbo->priv = talloc_zero(p, struct gxm_fbo_priv);
 
     ctx->ra_ctx = p->ra_ctx;
     return 0;
@@ -42,6 +51,7 @@ static int wrap_fbo(struct libmpv_gpu_context *ctx, mpv_render_param *params, st
 {
     struct priv *p = ctx->priv;
     struct ra *ra = p->ra_ctx->ra;
+    struct gxm_fbo_priv *fbo_priv = p->cur_fbo->priv;
     struct ra_format *fmt = NULL;
 
     mpv_gxm_fbo *fbo = get_mpv_render_param(params, MPV_RENDER_PARAM_GXM_FBO, NULL);
@@ -56,7 +66,7 @@ static int wrap_fbo(struct libmpv_gpu_context *ctx, mpv_render_param *params, st
         }
     }
 
-    p->tex->params = (struct ra_tex_params) {
+    p->cur_fbo->params = (struct ra_tex_params) {
             .dimensions = 2,
             .w          = fbo->w,
             .h          = fbo->h,
@@ -65,32 +75,43 @@ static int wrap_fbo(struct libmpv_gpu_context *ctx, mpv_render_param *params, st
             .render_dst = true,
             // TODO: blit_src and blit_dst
     };
-    p->tex->priv = fbo->tex;
+    fbo_priv->color_surface = fbo->color_surface;
+    fbo_priv->render_target = fbo->render_target;
+    fbo_priv->depth_stencil_surface = fbo->depth_stencil_surface;
 
-    *out = p->tex;
+    *out = p->cur_fbo;
     return 0;
 }
 
-static void start_frame(struct libmpv_gpu_context *ctx)
+static void __attribute__((__optimize__("no-optimize-sibling-calls"))) start_frame(struct libmpv_gpu_context *ctx)
 {
     struct priv *p = ctx->priv;
-    NVGXMframebuffer *fbo = p->tex->priv;
-    if (!fbo)
+    struct gxm_fbo_priv *fbo = p->cur_fbo->priv;
+    if (!fbo->render_target || !fbo->color_surface || !fbo->depth_stencil_surface)
         return;
-    gxmBeginFrameEx(fbo, 0);
+    sceGxmBeginScene(p->context,
+                    0,
+                    fbo->render_target,
+                    NULL,
+                    NULL,
+                    NULL,
+                    fbo->color_surface,
+                    fbo->depth_stencil_surface);
 }
 
-static void done_frame(struct libmpv_gpu_context *ctx, bool ds)
+static void __attribute__((__optimize__("no-optimize-sibling-calls"))) done_frame(struct libmpv_gpu_context *ctx, bool ds)
 {
     struct priv *p = ctx->priv;
-    NVGXMframebuffer *fbo = p->tex->priv;
-    if (!fbo)
+    struct gxm_fbo_priv *fbo = p->cur_fbo->priv;
+    if (!fbo->render_target || !fbo->color_surface || !fbo->depth_stencil_surface)
         return;
-    gxmEndFrame();
+    sceGxmEndScene(p->context, NULL, NULL);
 }
 
 static void destroy(struct libmpv_gpu_context *ctx)
 {
+    MP_VERBOSE(ctx, "Destroying libmpv gxm context\n");
+
     struct ra_ctx *ra_ctx = ctx->ra_ctx;
     if (ra_ctx->ra)
         ra_ctx->ra->fns->destroy(ra_ctx->ra);

@@ -126,7 +126,9 @@ int main(int argc, char *argv[]) {
     };
     fb = gxmCreateFramebuffer(&framebufferOpts);
     mpv_gxm_fbo fbo = {
-            .tex = fb,
+            .render_target = fb->gxm_render_target,
+            .color_surface = &fb->gxm_color_surfaces[0].surface,
+            .depth_stencil_surface = &fb->gxm_depth_stencil_surface,
             .w = texture_width,
             .h = texture_height,
             .format = SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_RGBA,

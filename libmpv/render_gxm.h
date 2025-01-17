@@ -18,9 +18,6 @@
 
 #include <psp2/gxm.h>
 
-#include "render.h"
-#include "nanovg_gxm_utils.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -44,7 +41,9 @@ typedef struct mpv_gxm_fbo {
     /**
      * Texture object.
      */
-    NVGXMframebuffer *tex;
+    SceGxmRenderTarget *render_target;
+    SceGxmColorSurface *color_surface;
+    SceGxmDepthStencilSurface *depth_stencil_surface;
     /**
      * Valid dimensions. This must refer to the size of the framebuffer. This
      * must always be set.

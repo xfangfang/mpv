@@ -225,7 +225,8 @@ static SceGxmBlendFactor map_ra_blend(enum ra_blend blend)
         case RA_BLEND_ONE:                 return SCE_GXM_BLEND_FACTOR_ONE;
         case RA_BLEND_SRC_ALPHA:           return SCE_GXM_BLEND_FACTOR_SRC_ALPHA;
         case RA_BLEND_ONE_MINUS_SRC_ALPHA: return SCE_GXM_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-    };
+    }
+    MP_ASSERT_UNREACHABLE();
 }
 
 static SceGxmAttributeFormat map_vertex_type(enum ra_vartype type) {
