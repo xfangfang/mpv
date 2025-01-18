@@ -1788,14 +1788,12 @@ if get_option('cplayer')
                   input: mpv,
                   output: 'mpv.self',
                   command: [
-#                      'arm-vita-eabi-strip', '-g', 'mpv',
-#                      '&&',
                       'vita-elf-create', 'mpv', 'mpv.velf',
                       '&&',
                       'vita-make-fself', '-c', 'mpv.velf', 'mpv.self'
                   ],
                   depends: mpv,
-                  build_by_default: true
+                  build_by_default: false
     )
 
     send_eboot = custom_target('send_eboot',
@@ -1805,7 +1803,7 @@ if get_option('cplayer')
                       'curl', '-T', 'mpv.self', 'ftp://192.168.1.140:1337/ux0:/app/MPV000000/eboot.bin',
                   ],
                   depends: create_vita_self,
-                  build_by_default: true
+                  build_by_default: false
     )
 
     create_vita_vpk = custom_target('create_vita_vpk',

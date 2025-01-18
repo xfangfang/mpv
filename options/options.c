@@ -1022,7 +1022,7 @@ static const struct MPOpts mp_default_opts = {
     .default_max_pts_correction = -1,
     .initial_audio_sync = true,
     .frame_dropping = 1,
-#ifdef HAVE_GXM
+#if HAVE_GXM
     .video_latency_hacks = true,
 #endif
     .term_osd = 2,
