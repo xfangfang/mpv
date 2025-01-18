@@ -30,6 +30,9 @@ static int init(struct libmpv_gpu_context *ctx, mpv_render_param *params)
 
     p->context = init_params->context;
     p->shader_patcher = init_params->shader_patcher;
+#ifndef HAVE_VITASHARK
+    init_params->buffer_index = 0;
+#endif
 
     // initialize a blank ra_ctx to reuse ra_gl_ctx
     p->ra_ctx = talloc_zero(p, struct ra_ctx);

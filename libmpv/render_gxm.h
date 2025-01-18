@@ -27,10 +27,16 @@ extern "C" {
  */
 typedef struct mpv_gxm_init_params {
     /**
-     * The gxm context that will be used in subsequent operation.
+     * The gxm context and shader patcher that will be used in subsequent operation.
      */
     SceGxmContext *context;
     SceGxmShaderPatcher *shader_patcher;
+    /**
+     * Fragment Uniform buffer index.
+     * sceGxmSetFragmentUniformBuffer(...) will use this index to set the fragment uniform buffer.
+     * If you set `-Dvitashark=disabled` when building libmpv, buffer_index will be fixed to 0
+     * Please make sure it does not conflict with other parts of your application
+     */
     int buffer_index;
 } mpv_gxm_init_params;
 
@@ -39,7 +45,10 @@ typedef struct mpv_gxm_init_params {
  */
 typedef struct mpv_gxm_fbo {
     /**
-     * Texture object.
+     * Set the framebuffer to render to.
+     * if any object is NULL, the default framebuffer will be used.
+     * When using the default framebuffer, make sure mpv_render_context_render(...) runs between sceGxmBeginScene and sceGxmEndScene
+     * When using a custom framebuffer, make sure mpv_render_context_render(...) runs outside sceGxmBeginScene and sceGxmEndScene
      */
     SceGxmRenderTarget *render_target;
     SceGxmColorSurface *color_surface;
