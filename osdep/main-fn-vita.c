@@ -34,7 +34,8 @@ int main(int argc, char *argv[]) {
     }
 #endif
 
-    SceCtrlData pad;
+    SceCtrlData pad, old_pad;
+    unsigned int pressed;
     NVGXMwindow *window = NULL;
     NVGcontext *vg = NULL;
     NVGXMinitOptions initOptions = {
@@ -149,21 +150,35 @@ int main(int argc, char *argv[]) {
     NVGcolor clearColor = nvgRGBAf(0.3f, 0.3f, 0.32f, 1.0f);
     gxmClearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
 
+    memset(&pad, 0, sizeof(pad));
+    memset(&old_pad, 0, sizeof(old_pad));
     for (;;) {
         sceCtrlPeekBufferPositive(0, &pad, 1);
-        if (pad.buttons & SCE_CTRL_START)
+        pressed = pad.buttons & ~old_pad.buttons;
+        old_pad = pad;
+
+        if (pressed & SCE_CTRL_START)
             break;
 
-        if (pad.buttons & SCE_CTRL_CIRCLE) {
-            static bool paused = false;
-            const char *cmd[] = {"set", "pause", paused ? "no" : "yes", NULL};
+        if (pressed & SCE_CTRL_CIRCLE) {
+            static bool changed = true;
+            const char *cmd[] = {"set", "pause", changed ? "yes" : "no", NULL};
             mpv_command(mpv, cmd);
-            paused = !paused;
+            changed = !changed;
         }
 
-        if (pad.buttons & SCE_CTRL_TRIANGLE) {
-            const char *cmd[] = {"set", "video-margin-ratio-right", "0.5", NULL};
+        if (pressed & SCE_CTRL_TRIANGLE) {
+            static bool changed = true;
+            const char *cmd[] = {"set", "video-margin-ratio-right", changed ? "0.5" : "0.0", NULL};
             mpv_command(mpv, cmd);
+            changed = !changed;
+        }
+
+        if (pressed & SCE_CTRL_SQUARE) {
+            static bool changed = true;
+            const char *cmd[] = {"set", "gamma", changed ? "100" : "0", NULL};
+            mpv_command(mpv, cmd);
+            changed = !changed;
         }
 
         gxmBeginFrame();
