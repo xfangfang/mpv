@@ -39,6 +39,9 @@ struct ra_gxm {
 
     // uniform buffer index
     int buffer_index;
+
+    // Application multisample mode
+    SceGxmMultisampleMode msaa;
 };
 
 struct ra_tex_gxm {
@@ -60,9 +63,9 @@ struct gxm_format {
     bool renderable, linear_filter, storable, ordered;
 };
 
-// Create an RA instance from a D3D11 device. This takes a reference to the
-// device, which is released when the RA instance is destroyed.
-struct ra *ra_gxm_create(SceGxmContext *context, SceGxmShaderPatcher *shader_patcher, struct mp_log *log, int buffer_index);
+// Create an RA instance.
+struct ra *ra_gxm_create(struct mp_log *log, SceGxmContext *context, SceGxmShaderPatcher *shader_patcher,
+                         int buffer_index, SceGxmMultisampleMode msaa);
 
 // True if the RA instance was created with ra_gxm_create()
 bool ra_is_gxm(struct ra *ra);

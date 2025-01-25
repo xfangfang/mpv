@@ -38,6 +38,11 @@ typedef struct mpv_gxm_init_params {
      * Please make sure it does not conflict with other parts of your application
      */
     int buffer_index;
+    /**
+     * multisample mode of mpv shader.
+     * This should set to the same value as the one used in other parts of your application
+     */
+    SceGxmMultisampleMode msaa;
 } mpv_gxm_init_params;
 
 /**

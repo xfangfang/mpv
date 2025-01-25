@@ -39,7 +39,7 @@ static int init(struct libmpv_gpu_context *ctx, mpv_render_param *params)
     p->ra_ctx->log = ctx->log;
     p->ra_ctx->global = ctx->global;
 
-    p->ra_ctx->ra = ra_gxm_create(p->context, p->shader_patcher, ctx->log, init_params->buffer_index);
+    p->ra_ctx->ra = ra_gxm_create(ctx->log, p->context, p->shader_patcher, init_params->buffer_index, init_params->msaa);
     if (!p->ra_ctx->ra)
         return MPV_ERROR_UNSUPPORTED;
 

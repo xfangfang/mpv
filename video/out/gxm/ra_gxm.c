@@ -704,7 +704,7 @@ static struct ra_renderpass *gxm_renderpass_create(struct ra *ra,
 
     sceGxmShaderPatcherCreateFragmentProgram(
             gxm->shader_patcher, p->prog.frag_id,
-            SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4, SCE_GXM_MULTISAMPLE_4X,
+            SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4, gxm->msaa,
             blendInfo, p->prog.vert_gxp,
             &p->prog.frag);
 
@@ -834,8 +834,8 @@ static struct ra_fns ra_fns_gxm = {
 };
 
 
-struct ra *
-ra_gxm_create(SceGxmContext *context, SceGxmShaderPatcher *shader_patcher, struct mp_log *log, int buffer_index) {
+struct ra * ra_gxm_create(struct mp_log *log, SceGxmContext *context, SceGxmShaderPatcher *shader_patcher,
+                          int buffer_index, SceGxmMultisampleMode msaa) {
     struct ra *ra = talloc_zero(NULL, struct ra);
     ra->log = log;
     ra->fns = &ra_fns_gxm;
@@ -850,6 +850,7 @@ ra_gxm_create(SceGxmContext *context, SceGxmShaderPatcher *shader_patcher, struc
     p->context = context;
     p->shader_patcher = shader_patcher;
     p->buffer_index = buffer_index;
+    p->msaa = msaa;
 
     ra->max_texture_wh = 1920;
 

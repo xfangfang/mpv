@@ -67,6 +67,7 @@ int main(int argc, char *argv[]) {
             .context = window->context,
             .shader_patcher = window->shader_patcher,
             .buffer_index = 0,
+            .msaa = initOptions.msaa,
     };
 
     mpv_render_param params[] = {
@@ -86,14 +87,14 @@ int main(int argc, char *argv[]) {
     mpv_set_option_string(mpv, "terminal", "yes");
     mpv_set_option_string(mpv, "msg-level", "all=debug");
     mpv_set_option_string(mpv, "vd-lavc-threads", "4");
+    mpv_set_option_string(mpv, "fbo-format", "rgba8");
+    mpv_set_option_string(mpv, "hwdec", "auto");
 
     // Put font file to ux0:/data/fonts/ to test libass
     mpv_set_option_string(mpv, "osd-fonts-dir", "ux0:/data/fonts");
     mpv_set_option_string(mpv, "osd-font", "Open Sans");
     mpv_set_option_string(mpv, "osd-msg1", "libass text");
 
-//    mpv_set_option_string(mpv, "scale", "mitchell");
-//    mpv_set_option_string(mpv, "dscale", "bilinear");
 
     printf("Initialize mpv\n");
     if (mpv_initialize(mpv) < 0) {
