@@ -418,6 +418,7 @@ if psvita
                      'osdep/timer-linux.c',
                      'osdep/language-posix.c',
                      'osdep/main-fn-vita.c',
+                     'audio/out/ao_vita.c',
                      'video/out/gxm/libmpv_gxm.c',
                      'video/out/gxm/ra_gxm.c',
     )
