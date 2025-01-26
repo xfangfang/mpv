@@ -314,7 +314,7 @@ endif
 
 if psvita
     flags += ['-D__PSV__']
-    link_flags += ['-Wl,-q', '-Wl,-z,nocopyreloc']
+    link_flags += ['-Wl,-q', '-Wl,-z,nocopyreloc', '-lSceAudio_stub']
     if (get_option('vitashark').allowed())
         features += {'vitashark': true}
         flags += ['-DUSE_VITA_SHARK']
