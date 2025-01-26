@@ -2,20 +2,20 @@
 #include <libmpv/render_gxm.h>
 #include <libmpv/render.h>
 #include <stdbool.h>
-
-#include <nanovg.h>
-
-#define NANOVG_GXM_IMPLEMENTATION
-#define NANOVG_GXM_UTILS_IMPLEMENTATION
-
-#include <nanovg_gxm.h>
+#include <stdlib.h>
+#include <string.h>
+#include <vita2d.h>
 #include <psp2/ctrl.h>
 #include <psp2/kernel/clib.h>
 
+#include "config.h"
+
+#if HAVE_VITASHARK
+#include <vitashark.h>
+#endif
+
 #define printf sceClibPrintf
 
-unsigned int _newlib_heap_size_user = 220 * 1024 * 1024;
-unsigned int sceLibcHeapSize = 24 * 1024 * 1024;
 unsigned int _pthread_stack_default_user = 2 * 1024 * 1024;
 
 static int redraw = 0;
@@ -27,7 +27,7 @@ static void mpv_render_update(void *cb_ctx) {
 int main(int argc, char *argv[]) {
     printf("==== START ====\n");
 
-#ifdef USE_VITA_SHARK
+#if HAVE_VITASHARK
     if (shark_init(NULL) < 0) {
         sceClibPrintf("vitashark: failed to initialize\n");
         return EXIT_FAILURE;
@@ -36,26 +36,8 @@ int main(int argc, char *argv[]) {
 
     SceCtrlData pad, old_pad;
     unsigned int pressed;
-    NVGXMwindow *window = NULL;
-    NVGcontext *vg = NULL;
-    NVGXMinitOptions initOptions = {
-            .msaa = SCE_GXM_MULTISAMPLE_4X,
-            .swapInterval = 1,
-            .dumpShader = 0,
-            .scenesPerFrame = 1,
-    };
-
-    window = gxmCreateWindow(&initOptions);
-    if (window == NULL) {
-        sceClibPrintf("gxm: failed to initialize\n");
-        return EXIT_FAILURE;
-    }
-
-    vg = nvgCreateGXM(window->context, window->shader_patcher, NVG_DEBUG);
-    if (vg == NULL) {
-        sceClibPrintf("nanovg: failed to initialize\n");
-        return EXIT_FAILURE;
-    }
+    vita2d_init();
+    vita2d_set_clear_color(RGBA8(0x40, 0x40, 0x40, 0xFF));
 
     mpv_handle *mpv = mpv_create();
     if (!mpv) {
@@ -65,10 +47,10 @@ int main(int argc, char *argv[]) {
 
     printf("Initialize mpv render context\n");
     mpv_gxm_init_params gxm_params = {
-            .context = window->context,
-            .shader_patcher = window->shader_patcher,
+            .context = vita2d_get_context(),
+            .shader_patcher = vita2d_get_shader_patcher(),
             .buffer_index = 0,
-            .msaa = initOptions.msaa,
+            .msaa = SCE_GXM_MULTISAMPLE_NONE,
     };
 
     mpv_render_param params[] = {
@@ -107,30 +89,15 @@ int main(int argc, char *argv[]) {
         mpv_command(mpv, cmd);
     }
 
-    int texture_width = DISPLAY_WIDTH;
-    int texture_height = DISPLAY_HEIGHT;
-    int texture_stride = ALIGN(texture_width, 8);
-    int image = nvgCreateImageRGBA(vg, texture_width, texture_height, 0, NULL);
-    NVGpaint img = nvgImagePattern(vg, 0, 0, texture_width, texture_height, 0, image, 1.0f);
-    NVGXMtexture *texture = nvgxmImageHandle(vg, image);
+    int texture_width = 960;
+    int texture_height = 544;
+    vita2d_texture *img = vita2d_create_empty_texture_rendertarget(texture_width, texture_height, SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR);
 
     int flip_y = 1;
-    NVGXMframebuffer *fb = NULL;
-    NVGXMframebufferInitOptions framebufferOpts = {
-            .display_buffer_count = 1, // Must be 1 for custom FBOs
-            .scenesPerFrame = 1,
-            .render_target = texture,
-            .color_format = SCE_GXM_COLOR_FORMAT_U8U8U8U8_ABGR,
-            .color_surface_type = SCE_GXM_COLOR_SURFACE_LINEAR,
-            .display_width = texture_width,
-            .display_height = texture_height,
-            .display_stride = texture_stride,
-    };
-    fb = gxmCreateFramebuffer(&framebufferOpts);
     mpv_gxm_fbo fbo = {
-            .render_target = fb->gxm_render_target,
-            .color_surface = &fb->gxm_color_surfaces[0].surface,
-            .depth_stencil_surface = &fb->gxm_depth_stencil_surface,
+            .render_target = img->gxm_rtgt,
+            .color_surface = &img->gxm_sfc,
+            .depth_stencil_surface = &img->gxm_sfd,
             .w = texture_width,
             .h = texture_height,
             .format = SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_RGBA,
@@ -146,9 +113,6 @@ int main(int argc, char *argv[]) {
 //        const char *cmd[] = {"loadfile", "file://ux0:/sintel_trailer-720p.mp4", NULL};
         mpv_command(mpv, cmd);
     }
-
-    NVGcolor clearColor = nvgRGBAf(0.3f, 0.3f, 0.32f, 1.0f);
-    gxmClearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
 
     memset(&pad, 0, sizeof(pad));
     memset(&old_pad, 0, sizeof(old_pad));
@@ -181,18 +145,13 @@ int main(int argc, char *argv[]) {
             changed = !changed;
         }
 
-        gxmBeginFrame();
-        gxmClear();
-        nvgBeginFrame(vg, DISPLAY_WIDTH, DISPLAY_HEIGHT, 1.0f);
+        vita2d_start_drawing();
+        vita2d_clear_screen();
 
-        nvgBeginPath(vg);
-        nvgRect(vg, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
-        nvgFillPaint(vg, img);
-        nvgFill(vg);
+        vita2d_draw_texture(img, 0, 0);
 
-        nvgEndFrame(vg);
-        gxmEndFrame();
-        gxmSwapBuffer();
+        vita2d_end_drawing();
+        vita2d_swap_buffers();
 
         if (redraw && mpv_render_context_update(mpv_context) & MPV_RENDER_UPDATE_FRAME) {
             redraw = 0;
@@ -204,11 +163,10 @@ int main(int argc, char *argv[]) {
     mpv_command_string(mpv, "quit");
     mpv_render_context_free(mpv_context);
     mpv_terminate_destroy(mpv);
-    nvgDeleteGXM(vg);
-    gxmDeleteFramebuffer(fb);
-    gxmDeleteWindow(window);
+    vita2d_fini();
+    vita2d_free_texture(img);
 
-#ifdef USE_VITA_SHARK
+#if HAVE_VITASHARK
     // Clean up vitashark as we don't need it anymore
     shark_end();
 #endif

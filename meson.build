@@ -313,13 +313,33 @@ if host_machine.system() == 'cygwin'
 endif
 
 if psvita
-    flags += ['-D__PSV__']
-    link_flags += ['-Wl,-q', '-Wl,-z,nocopyreloc', '-lSceAudio_stub']
-    if (get_option('vitashark').allowed())
-        features += {'vitashark': true}
-        flags += ['-DUSE_VITA_SHARK']
-        link_flags += ['-lvitashark', '-lSceShaccCgExt', '-ltaihen_stub', '-lSceShaccCg_stub']
+    dependencies += cc.find_library('SceAudio_stub')
+    link_flags += ['-Wl,-q', '-Wl,-z,nocopyreloc']
+    features += {'vitashark': get_option('vitashark').allowed()}
+    if (features['vitashark'])
+        dependencies += [cc.find_library('vitashark'),
+                         cc.find_library('SceShaccCgExt'),
+                         cc.find_library('taihen_stub'),
+                         cc.find_library('SceShaccCg_stub')]
     endif
+    if get_option('cplayer')
+        sources += files('osdep/main-fn-vita.c')
+        link_flags += ['-lvita2d',
+                       '-lSceCommonDialog_stub',
+                       '-lSceAppMgr_stub',
+                       '-lSceGxm_stub',
+                       '-lSceDisplay_stub',
+                       '-lSceCtrl_stub']
+    endif
+    features += {'gxm': get_option('gxm').allowed()}
+    sources += files('osdep/terminal-dummy.c',
+                     'osdep/path-unix.c',
+                     'osdep/timer-linux.c',
+                     'osdep/language-posix.c',
+                     'audio/out/ao_vita.c',
+                     'video/out/gxm/libmpv_gxm.c',
+                     'video/out/gxm/ra_gxm.c',
+    )
 endif
 
 noexecstack = false
@@ -410,18 +430,7 @@ if features['cocoa']
 endif
 
 if psvita
-    features += {'gxm': get_option('gxm').allowed()}
     includedir += include_directories('osdep/vita/include')
-    sources += files('osdep/terminal-dummy.c',
-                     'osdep/vita/nanovg.c',
-                     'osdep/path-unix.c',
-                     'osdep/timer-linux.c',
-                     'osdep/language-posix.c',
-                     'osdep/main-fn-vita.c',
-                     'audio/out/ao_vita.c',
-                     'video/out/gxm/libmpv_gxm.c',
-                     'video/out/gxm/ra_gxm.c',
-    )
 endif
 
 if posix
