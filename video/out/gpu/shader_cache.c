@@ -333,7 +333,7 @@ void gl_sc_uniform_texture(struct gl_shader_cache *sc, char *name,
     u->input.type = RA_VARTYPE_TEX;
     u->glsl_type = glsl_type;
     u->input.binding = gl_sc_next_binding(sc, u->input.type);
-    u->input.semantic = talloc_asprintf(NULL, "TEXUNIT%d", u->input.binding);
+    u->input.semantic = sc->ra->glsl_gxm ? talloc_asprintf(NULL, "TEXUNIT%d", u->input.binding) : NULL;
     u->v.tex = tex;
 }
 
@@ -828,10 +828,12 @@ static void gl_sc_generate(struct gl_shader_cache *sc,
     } else if (glsl_version >= 130) {
         ADD(header, "#define tex1D texture\n");
         ADD(header, "#define tex3D texture\n");
+        ADD(header, "#define mul(a, b) a * b\n");
     } else {
         ADD(header, "#define tex1D texture1D\n");
         ADD(header, "#define tex3D texture3D\n");
         ADD(header, "#define texture texture2D\n");
+        ADD(header, "#define mul(a, b) a * b\n");
     }
 
     // Additional helpers.
