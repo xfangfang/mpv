@@ -45,6 +45,21 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
+    printf("Set mpv options\n");
+    mpv_set_option_string(mpv, "terminal", "yes");
+    mpv_set_option_string(mpv, "msg-level", "all=debug");
+    mpv_set_option_string(mpv, "vd-lavc-threads", "4");
+    mpv_set_option_string(mpv, "fbo-format", "rgba8");
+    mpv_set_option_string(mpv, "hwdec", "auto");
+
+    // Disable direct rendering, only for testing, should be enabled in actual use
+    // mpv_set_option_string(mpv, "vd-lavc-dr", "no");
+
+    // Put font file to ux0:/data/fonts/ to test libass
+    mpv_set_option_string(mpv, "osd-fonts-dir", "ux0:/data/fonts");
+    mpv_set_option_string(mpv, "osd-font", "Open Sans");
+    mpv_set_option_string(mpv, "osd-msg1", "libass text");
+
     printf("Initialize mpv render context\n");
     mpv_gxm_init_params gxm_params = {
             .context = vita2d_get_context(),
@@ -65,19 +80,6 @@ int main(int argc, char *argv[]) {
     }
     printf("Set update callback\n");
     mpv_render_context_set_update_callback(mpv_context, mpv_render_update, NULL);
-
-    printf("Set mpv options\n");
-    mpv_set_option_string(mpv, "terminal", "yes");
-    mpv_set_option_string(mpv, "msg-level", "all=debug");
-    mpv_set_option_string(mpv, "vd-lavc-threads", "4");
-    mpv_set_option_string(mpv, "fbo-format", "rgba8");
-    mpv_set_option_string(mpv, "hwdec", "auto");
-
-    // Put font file to ux0:/data/fonts/ to test libass
-    mpv_set_option_string(mpv, "osd-fonts-dir", "ux0:/data/fonts");
-    mpv_set_option_string(mpv, "osd-font", "Open Sans");
-    mpv_set_option_string(mpv, "osd-msg1", "libass text");
-
 
     printf("Initialize mpv\n");
     if (mpv_initialize(mpv) < 0) {
@@ -163,8 +165,8 @@ int main(int argc, char *argv[]) {
     mpv_command_string(mpv, "quit");
     mpv_render_context_free(mpv_context);
     mpv_terminate_destroy(mpv);
-    vita2d_fini();
     vita2d_free_texture(img);
+    vita2d_fini();
 
 #if HAVE_VITASHARK
     // Clean up vitashark as we don't need it anymore

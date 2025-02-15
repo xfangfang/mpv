@@ -339,6 +339,7 @@ if psvita
                      'audio/out/ao_vita.c',
                      'video/out/gxm/libmpv_gxm.c',
                      'video/out/gxm/ra_gxm.c',
+                     'video/out/hwdec/hwdec_gxm.c',
     )
 endif
 

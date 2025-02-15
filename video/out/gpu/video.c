@@ -2351,6 +2351,20 @@ static void pass_convert_yuv(struct gl_video *p)
     mp_csp_equalizer_state_get(p->video_eq, &cparams);
     p->user_gamma = 1.0 / (cparams.gamma * p->opts.gamma);
 
+    if (p->ra->glsl_gxm && p->hwdec_mapper) {
+        struct mp_cmat m = {{{0}}};
+        cparams.color.space = MP_CSP_RGB;
+        mp_get_csp_matrix(&cparams, &m);
+
+        gl_sc_uniform_mat3(sc, "colormatrix", true, &m.m[0][0]);
+        gl_sc_uniform_vec3(sc, "colormatrix_c", m.c);
+
+        GLSL(color.rgb = mul(colormatrix, color.rgb) + colormatrix_c;)
+
+        p->components = 3;
+        return;
+    }
+
     pass_describe(p, "color conversion");
 
     if (p->color_swizzle[0])
@@ -2985,6 +2999,10 @@ static void pass_render_frame_dumb(struct gl_video *p)
         gl_transform_trans(img[i].transform, &t);
         img[i].transform = t;
 
+        if (p->ra->glsl_gxm && p->hwdec_mapper) {
+            assert(p->plane_count == 1);
+            img[i].components = 3;
+        }
         copy_image(p, &index, img[i]);
     }
 
@@ -3642,6 +3660,11 @@ static bool pass_upload_image(struct gl_video *p, struct mp_image *mpi, uint64_t
 
         if (!p->hwdec_mapper)
             goto error;
+
+        if (p->ra->glsl_gxm) {
+            p->plane_count = 1;
+            vimg->mpi->num_planes = 1;
+        }
 
         pass_describe(p, "map frame (hwdec)");
         timer_pool_start(p->upload_timer);
