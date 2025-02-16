@@ -836,7 +836,7 @@ static void init_avctx(struct mp_filter *vd)
     }
 
 #if HAVE_GXM
-    if (ctx->use_hwdec && lavc_codec->id == AV_CODEC_ID_H264 ) {
+    if (ctx->use_hwdec && lavc_codec->id == AV_CODEC_ID_H264) {
         avctx->opaque = vd;
         avctx->get_buffer2 = get_buffer2_direct_gxm;
         c->lav_codecpar->format = lavc_param->dr ? AV_PIX_FMT_VITA_NV12: AV_PIX_FMT_VITA_YUV420P;

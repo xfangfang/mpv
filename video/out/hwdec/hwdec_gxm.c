@@ -30,6 +30,10 @@ struct gxm_priv {
 
 static int init(struct ra_hwdec *hw) {
     struct priv_owner *priv = hw->priv;
+    if (!hw->ra_ctx->ra->glsl_gxm) {
+        MP_ERR(hw, "Only GXM is supported\n");
+        return -1;
+    }
 
     // TODO: gc_count should be >= `display buffer count` of user's application
     priv->gc_count = 3;
@@ -52,10 +56,6 @@ static void uninit(struct ra_hwdec *hw) {
 }
 
 static int mapper_init(struct ra_hwdec_mapper *mapper) {
-    if (!mapper->ra->glsl_gxm) {
-        MP_ERR(mapper, "Only GXM is not supported\n");
-        return -1;
-    }
     mapper->dst_params = mapper->src_params;
 
     struct ra_tex *tex = NULL;
