@@ -835,13 +835,7 @@ static void init_avctx(struct mp_filter *vd)
         mp_set_avcodec_threads(vd->log, avctx, lavc_param->threads);
     }
 
-#if HAVE_GXM
-    if (ctx->use_hwdec && lavc_codec->id == AV_CODEC_ID_H264) {
-        avctx->opaque = vd;
-        avctx->get_buffer2 = get_buffer2_direct_gxm;
-        c->lav_codecpar->format = lavc_param->dr ? AV_PIX_FMT_VITA_NV12: AV_PIX_FMT_VITA_YUV420P;
-    }
-#else
+#if !HAVE_GXM
     if (!ctx->use_hwdec && ctx->vo && lavc_param->dr) {
         avctx->opaque = vd;
         avctx->get_buffer2 = get_buffer2_direct;
@@ -906,6 +900,13 @@ static void init_avctx(struct mp_filter *vd)
         goto error;
     }
 
+#if HAVE_GXM
+    if (ctx->use_hwdec && lavc_codec->id == AV_CODEC_ID_H264) {
+        avctx->opaque = vd;
+        avctx->get_buffer2 = get_buffer2_direct_gxm;
+        avctx->pix_fmt = lavc_param->dr ? AV_PIX_FMT_VITA_NV12: AV_PIX_FMT_VITA_YUV420P;
+    }
+#endif
     /* open it */
     if (avcodec_open2(avctx, lavc_codec, NULL) < 0)
         goto error;
