@@ -33,7 +33,7 @@ extern const char ps4_frag_default[];
 
 // default shader with gamma correction
 extern const char ps4_frag_default_gamma[];
-#define ps4_vert_default_gamma_sha "157F8A13AE02FA8D5D4C1AA15C5A76936A837BE8EC27137FD2F7E4C9AC3697C3"
+#define ps4_frag_default_gamma_sha "157F8A13AE02FA8D5D4C1AA15C5A76936A837BE8EC27137FD2F7E4C9AC3697C3"
 
 // subtitle default shader
 extern const char ps4_vert_sub[];
