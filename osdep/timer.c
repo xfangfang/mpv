@@ -28,6 +28,8 @@
 #include "misc/random.h"
 #include "timer.h"
 
+#undef _POSIX_TIMERS
+
 static uint64_t raw_time_offset;
 static pthread_once_t timer_init_once = PTHREAD_ONCE_INIT;
 

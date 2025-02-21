@@ -24,6 +24,8 @@
 #include <sys/time.h>
 #include "timer.h"
 
+#undef _POSIX_TIMERS
+
 void mp_sleep_us(int64_t us)
 {
     if (us < 0)

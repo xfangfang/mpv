@@ -6,6 +6,10 @@
 
 static struct ra_fns ra_fns_gl;
 
+#ifdef __PS4__
+#include "ra_ps4.h"
+#endif
+
 // For ra.priv
 struct ra_gl {
     GL *gl;
@@ -749,13 +753,45 @@ static void compile_attach_shader(struct ra *ra, GLuint program,
     GL *gl = ra_gl_get(ra);
 
     GLuint shader = gl->CreateShader(type);
+#ifdef __PS4__
+    char hashstr[65];
+    MP_VERBOSE(ra, "ps4_mpv_use_precompiled_shaders: %i, ps4_mpv_dump_shaders: %i\n", 
+        ps4_mpv_use_precompiled_shaders, ps4_mpv_dump_shaders);
+    if(ps4_mpv_use_precompiled_shaders || ps4_mpv_dump_shaders) {
+        ps4_mpv_get_shader_hash(source, strlen(source), (char *) &hashstr);
+        MP_VERBOSE(ra, "compile_attach_shader: type: %s, sha: %s\n", shader_typestr(type), hashstr);
+    }
+    if(ps4_mpv_use_precompiled_shaders) {
+        ps4_shader *shader_bin = ps4_mpv_get_shader(hashstr);
+        if(shader_bin != NULL) {
+            MP_VERBOSE(ra, "compile_attach_shader: precompiled shader found, using it\n");
+            glShaderBinary(1, &shader, 0, (const void *) shader_bin->src, shader_bin->size);
+        } else {
+            MP_VERBOSE(ra, "compile_attach_shader: precompiled shader not found\n");
+        }
+    } else {
+        gl->ShaderSource(shader, 1, &source, NULL);
+    }
+#else
     gl->ShaderSource(shader, 1, &source, NULL);
+#endif
     gl->CompileShader(shader);
     GLint status = 0;
     gl->GetShaderiv(shader, GL_COMPILE_STATUS, &status);
     GLint log_length = 0;
     gl->GetShaderiv(shader, GL_INFO_LOG_LENGTH, &log_length);
-
+#ifdef __PS4__
+    if(ps4_mpv_dump_shaders) {
+        ps4_shader *shader_bin = ps4_mpv_get_shader(hashstr);
+        if(shader_bin == NULL) {
+            MP_VERBOSE(ra, "compile_attach_shader: precompiled shader not found, dumping\n");
+            ps4_mpv_dump_shader(shader, "/data/", hashstr);
+        } else {
+            MP_VERBOSE(ra, "compile_attach_shader: precompiled shader found, skipping dump\n");
+        }
+    }
+#endif
+    
     int pri = status ? (log_length > 1 ? MSGL_V : MSGL_DEBUG) : MSGL_ERR;
     const char *typestr = shader_typestr(type);
     if (mp_msg_test(ra->log, pri)) {

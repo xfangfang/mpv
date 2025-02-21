@@ -240,7 +240,6 @@ def build(ctx):
         ])
 
     getch2_c = ctx.pick_first_matching_dep([
-        ( "osdep/terminal-unix.c",               "posix" ),
         ( "osdep/terminal-win.c",                "win32-desktop" ),
         ( "osdep/terminal-dummy.c" ),
     ])
@@ -252,13 +251,11 @@ def build(ctx):
     ])
 
     ipc_c = ctx.pick_first_matching_dep([
-        ( "input/ipc-unix.c",                    "posix" ),
         ( "input/ipc-win.c",                     "win32-desktop" ),
         ( "input/ipc-dummy.c" ),
     ])
 
     subprocess_c = ctx.pick_first_matching_dep([
-        ( "osdep/subprocess-posix.c",            "posix" ),
         ( "osdep/subprocess-win.c",              "win32-desktop" ),
         ( "osdep/subprocess-dummy.c" ),
     ])
@@ -538,6 +535,7 @@ def build(ctx):
         ( "video/out/opengl/hwdec_vdpau.c",      "vdpau-gl-x11" ),
         ( "video/out/opengl/libmpv_gl.c",        "gl" ),
         ( "video/out/opengl/ra_gl.c",            "gl" ),
+        ( "video/out/opengl/ra_ps4.c",           "gl" ),
         ( "video/out/opengl/utils.c",            "gl" ),
         ( "video/out/present_sync.c",            "wayland || x11" ),
         ( "video/out/wldmabuf/context_wldmabuf.c", "dmabuf-wayland" ),
